@@ -446,6 +446,8 @@ namespace vk::renderer::detail
 
     VkRenderPass GetRenderPass(VkFormat colourFormat, VkFormat depthFormat, VkSampleCountFlagBits samples)
     {
+        static std::mutex s_renderPassMutex;
+        std::lock_guard lock(s_renderPassMutex);
         const RenderPassKey key{ colourFormat, depthFormat, samples };
         auto found = g.legacyRenderPasses.find(key);
         if (found != g.legacyRenderPasses.end()) return found->second;

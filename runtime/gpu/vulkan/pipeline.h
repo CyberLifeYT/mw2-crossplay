@@ -63,6 +63,7 @@ namespace vk::pipeline
     // submit to it; Vulkan requires a queue to be externally synchronised.
     std::mutex& QueueMutex();
     std::mutex& CacheMutex();
+    std::mutex& CreationMutex();
 
     // A VkResult that is not VK_SUCCESS. VK_ERROR_DEVICE_LOST also ends the run,
     // once, saying so: after the driver resets the GPU nothing submitted again

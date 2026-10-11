@@ -4,6 +4,7 @@
 #include "../internal.h"
 #include "../../diagnostics.h"
 #include "../../log.h"
+#include "../../platform.h"
 #include "../../report.h"
 #include "pipeline.h"
 
@@ -333,17 +334,20 @@ namespace vk::renderer::detail
 
         VkPipeline built = VK_NULL_HANDLE;
         VkResult res = VK_SUCCESS;
-        void* pCache = vk::pipeline::Cache();
-        if (pCache)
         {
-            std::lock_guard cacheLock(vk::pipeline::CacheMutex());
-            res = vkCreateGraphicsPipelines(g.device, static_cast<VkPipelineCache>(pCache),
-                                            1, &info, nullptr, &built);
-        }
-        else
-        {
-            res = vkCreateGraphicsPipelines(g.device, VK_NULL_HANDLE,
-                                            1, &info, nullptr, &built);
+            std::lock_guard createLock(vk::pipeline::CreationMutex());
+            void* pCache = vk::pipeline::Cache();
+            if (pCache)
+            {
+                std::lock_guard cacheLock(vk::pipeline::CacheMutex());
+                res = vkCreateGraphicsPipelines(g.device, static_cast<VkPipelineCache>(pCache),
+                                                1, &info, nullptr, &built);
+            }
+            else
+            {
+                res = vkCreateGraphicsPipelines(g.device, VK_NULL_HANDLE,
+                                                1, &info, nullptr, &built);
+            }
         }
         const uint64_t tookMs = uint64_t(std::chrono::duration_cast<std::chrono::milliseconds>(
             std::chrono::steady_clock::now() - compileStart).count());
@@ -419,10 +423,7 @@ namespace vk::renderer::detail
 
         void Worker()
         {
-#ifdef MW2_ANDROID
-            // Give lowest CPU priority so warmup never contends with game threads or audio mixer
-            setpriority(PRIO_PROCESS, 0, 19);
-#endif
+            platform::LowerThreadPriority();
             LOGI("warmup: scheduler worker thread started");
             while (!g_warmupStopping.load(std::memory_order_relaxed))
             {
@@ -667,29 +668,15 @@ namespace vk::renderer::detail
                 key.modeCntl = want.modeCntl;
             }
 
-            if (hasFastLibraries)
-            {
-                if (EnsurePipeline(key, vertex->second, pixel->second)) g.prewarmed++;
-                const uint32_t percent = 100 * (&want - wanted.data() + 1) / uint32_t(wanted.size());
-                if (percent >= last + 25) { LOGI("compiling shaders: %u%%", percent); last = percent; }
-            }
-            else
-            {
-                // Enqueue for background warmup scheduler
-                std::lock_guard lock(warmup::g_warmupMutex);
-                warmup::g_warmupQueue.push_back({ want });
-                warmup::g_statQueued.fetch_add(1, std::memory_order_relaxed);
-            }
+            if (EnsurePipeline(key, vertex->second, pixel->second)) g.prewarmed++;
             g.recorded.push_back(want);
+
+            const uint32_t percent = 100 * (&want - wanted.data() + 1) / uint32_t(wanted.size());
+            if (percent >= last + 25) { LOGI("compiling shaders: %u%%", percent); last = percent; }
         }
 
-        if (!hasFastLibraries && !warmup::g_warmupQueue.empty())
-        {
-            LOGI("warmup: queued %u pipelines for background warmup during cutscenes/loading",
-                 warmup::g_statQueued.load(std::memory_order_relaxed));
-            StartWarmupScheduler();
-            warmup::g_warmupCv.notify_all();
-        }
+        warmup::g_statQueued.store(uint32_t(wanted.size()), std::memory_order_relaxed);
+        warmup::g_statCompleted.store(g.prewarmed, std::memory_order_relaxed);
 
         g.prewarmMicroseconds = uint64_t(std::chrono::duration_cast<std::chrono::microseconds>(
             std::chrono::steady_clock::now() - start).count());

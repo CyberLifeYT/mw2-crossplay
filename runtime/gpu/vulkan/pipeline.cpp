@@ -742,6 +742,7 @@ bool     vk::pipeline::LegacyMode() { return g.legacyMode; }
 bool     vk::pipeline::TextureCompressionBC() { return g.textureCompressionBC; }
 std::mutex& vk::pipeline::QueueMutex() { static std::mutex m; return m; }
 std::mutex& vk::pipeline::CacheMutex() { static std::mutex m; return m; }
+std::mutex& vk::pipeline::CreationMutex() { static std::mutex m; return m; }
 void*    vk::pipeline::SetLayout(uint32_t set) { return set < 3 ? g.sets[set] : nullptr; }
 void*    vk::pipeline::Layout() { return g.layout; }
 void*    vk::pipeline::Cache()

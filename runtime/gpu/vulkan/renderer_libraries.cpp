@@ -71,6 +71,7 @@ namespace
         VkPipeline made = VK_NULL_HANDLE;
         VkResult res = VK_SUCCESS;
         {
+            std::lock_guard createLock(vk::pipeline::CreationMutex());
             void* pCache = Cache();
             if (pCache)
             {
@@ -158,6 +159,7 @@ namespace
         info.layout = Layout();
         VkPipeline made = VK_NULL_HANDLE;
         {
+            std::lock_guard createLock(vk::pipeline::CreationMutex());
             void* pCache = Cache();
             if (pCache)
             {
