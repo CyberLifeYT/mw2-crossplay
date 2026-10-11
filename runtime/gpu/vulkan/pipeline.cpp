@@ -25,6 +25,7 @@ bool     vk::pipeline::HasDynamicRendering() { return false; }
 bool     vk::pipeline::HasExtendedDynamicState() { return false; }
 bool     vk::pipeline::LegacyMode() { return false; }
 bool     vk::pipeline::TextureCompressionBC() { return false; }
+bool     vk::pipeline::IsMali() { return false; }
 std::mutex& vk::pipeline::QueueMutex() { static std::mutex m; return m; }
 void*    vk::pipeline::SetLayout(uint32_t) { return nullptr; }
 void*    vk::pipeline::Layout() { return nullptr; }
@@ -740,6 +741,7 @@ bool     vk::pipeline::HasDynamicRendering() { return g.hasDynamicRendering; }
 bool     vk::pipeline::HasExtendedDynamicState() { return g.hasExtendedDynamicState; }
 bool     vk::pipeline::LegacyMode() { return g.legacyMode; }
 bool     vk::pipeline::TextureCompressionBC() { return g.textureCompressionBC; }
+bool     vk::pipeline::IsMali() { return g.deviceProperties.vendorID == 0x13B5; }
 std::mutex& vk::pipeline::QueueMutex() { static std::mutex m; return m; }
 std::mutex& vk::pipeline::CacheMutex() { static std::mutex m; return m; }
 std::mutex& vk::pipeline::CreationMutex() { static std::mutex m; return m; }

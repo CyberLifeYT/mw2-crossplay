@@ -58,6 +58,8 @@ namespace vk::pipeline
     bool     LegacyMode();
     // Whether the device supports BC texture compression (BC1..BC5).
     bool     TextureCompressionBC();
+    // Whether the GPU is an ARM Mali (vendor ID 0x13B5).
+    bool     IsMali();
 
     // The device has one queue, and the window thread and the GPU thread both
     // submit to it; Vulkan requires a queue to be externally synchronised.
