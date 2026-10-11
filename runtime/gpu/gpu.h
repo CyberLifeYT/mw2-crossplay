@@ -31,6 +31,10 @@ namespace gpu
     // The block D3D9 polls for the command processor's progress through its
     // command-buffer arena: a position at +4 and a sequence counter at +0.
     void SetArenaProgressBlock(uint32_t address);
+    uint32_t GetArenaProgressBlock();
+    uint32_t GetArenaSequence();
+    void ForceArenaProgress(uint32_t sequence, uint32_t position);
+    bool CheckArenaWaitDeadlock(uint64_t maxWaitUs, uint32_t& outSeq, uint32_t& outPos);
 
     // The display's 256-entry colour table, as the scanout hardware holds it:
     // ten bits per channel, blue in the low bits. False until the title has

@@ -2,6 +2,7 @@
 #include "kernel.h"
 #include "../guest.h"
 #include "../log.h"
+#include "../crash.h"
 
 #include <algorithm>
 #include <chrono>
@@ -273,12 +274,15 @@ uint32_t kernel::Wait(Dispatcher* const* objects, uint32_t count, bool all,
         {
             if (block.wake.wait_for(held, std::chrono::seconds(2)) == std::cv_status::timeout)
             {
+                const char* tName = crash::CurrentThreadName();
                 if (objects[0]->handle)
-                    LOGW("sync: thread waiting on %u object(s) (first: %s, handle %08X) for >2s",
-                         count, objects[0]->TypeName(), objects[0]->handle);
+                    LOGW("sync: thread '%s' waiting on %u object(s) (first: %s, handle %08X) for >2s",
+                         tName ? tName : "unnamed", count, objects[0]->TypeName(), objects[0]->handle);
                 else
-                    LOGW("sync: thread waiting on %u object(s) (first: %s at guest %08X) for >2s",
-                         count, objects[0]->TypeName(), objects[0]->guestHeader);
+                    LOGW("sync: thread '%s' waiting on %u object(s) (first: %s at guest %08X) for >2s",
+                         tName ? tName : "unnamed", count, objects[0]->TypeName(), objects[0]->guestHeader);
+                static uint32_t s_waitCount = 0;
+                if (++s_waitCount % 3 == 0) kernel::ReportWaits();
             }
         }
     }

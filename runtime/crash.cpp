@@ -10,6 +10,7 @@
 #include "diagnostics.h"
 #include "platform.h"
 #include "gpu/internal.h"
+#include "gpu/gpu.h"
 #include <ppc_config.h>
 #include <csignal>
 #include <cstdio>
@@ -281,6 +282,24 @@ namespace
             if (!g_hangMonitorRunning.load(std::memory_order_relaxed)) break;
 
             auto batch = gpu::detail::CurrentBatchStatus();
+
+            uint32_t neededSeq = 0, neededPos = 0;
+            if (gpu::CheckArenaWaitDeadlock(2000000ull, neededSeq, neededPos))
+            {
+                if (!batch.inBatch || batch.readIndex == batch.wptr)
+                {
+                    const uint32_t block = gpu::GetArenaProgressBlock();
+                    if (block)
+                    {
+                        const uint32_t posTag = (neededPos & ~3u) | (neededSeq & 3u);
+                        std::fprintf(stderr, "[W] hang_monitor: T_D3D_ArenaWait spinning for >2s while GPU ring is idle (readIndex=%u, wptr=%u)! Auto-resolving arena deadlock to seq=%u, pos=%08X\n",
+                                     batch.readIndex, batch.wptr, neededSeq, posTag);
+                        std::fflush(stderr);
+                        gpu::ForceArenaProgress(neededSeq, posTag);
+                    }
+                }
+            }
+
             if (batch.inBatch && batch.elapsedMs >= 4000)
             {
                 const char* drawStage = gpu::detail::CurrentDrawStage();

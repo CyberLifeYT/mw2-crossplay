@@ -237,16 +237,28 @@ void vk::renderer::Resolve(const gpu::RegisterFile& r)
 
         // A copy rather than a blit: depth cannot be filtered on the way through,
         // and a plain copy asks nothing of the format beyond being transferable.
-        VkImageCopy copy{};
-        copy.srcSubresource = { kBoth, 0, 0, 1 };
-        copy.srcOffset = Scaled(rect.offset.x, rect.offset.y, 0);
-        copy.dstSubresource = copy.srcSubresource;
-        copy.dstOffset = Scaled(int32_t(destX), int32_t(destY), 0);
-        copy.extent = { width * g.scale, height * g.scale, 1 };
+        // In Vulkan 1.1 (VUID-VkImageCopy-srcSubresource-01700), depth/stencil formats
+        // must copy VK_IMAGE_ASPECT_DEPTH_BIT and VK_IMAGE_ASPECT_STENCIL_BIT separately.
+        VkImageCopy copies[2]{};
+        uint32_t copyCount = 1;
+        copies[0].srcSubresource = { VK_IMAGE_ASPECT_DEPTH_BIT, 0, 0, 1 };
+        copies[0].srcOffset = Scaled(rect.offset.x, rect.offset.y, 0);
+        copies[0].dstSubresource = copies[0].srcSubresource;
+        copies[0].dstOffset = Scaled(int32_t(destX), int32_t(destY), 0);
+        copies[0].extent = { width * g.scale, height * g.scale, 1 };
+
+        if (from->format == VK_FORMAT_D24_UNORM_S8_UINT || from->format == VK_FORMAT_D32_SFLOAT_S8_UINT)
+        {
+            copies[1] = copies[0];
+            copies[1].srcSubresource.aspectMask = VK_IMAGE_ASPECT_STENCIL_BIT;
+            copies[1].dstSubresource.aspectMask = VK_IMAGE_ASPECT_STENCIL_BIT;
+            copyCount = 2;
+        }
+
         const VkImage intoImage = into.image;
         Record([=](VkCommandBuffer command) {
             vkCmdCopyImage(command, fromImage, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
-                           intoImage, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &copy);
+                           intoImage, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, copyCount, copies);
         });
 
         RecordBarrier(into.image, kBoth,

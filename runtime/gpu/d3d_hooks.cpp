@@ -58,6 +58,28 @@ GUEST_HOOK(T_D3D_Present)
     stutters::TitlePresented();
 }
 
+namespace
+{
+    std::atomic<bool>     g_arenaWaitActive{ false };
+    std::atomic<uint32_t> g_arenaWaitNeededPos{ 0 };
+    std::atomic<uint32_t> g_arenaWaitNeededSeq{ 0 };
+    std::atomic<uint64_t> g_arenaWaitStartTimeUs{ 0 };
+}
+
+bool gpu::CheckArenaWaitDeadlock(uint64_t maxWaitUs, uint32_t& outSeq, uint32_t& outPos)
+{
+    if (!g_arenaWaitActive.load(std::memory_order_acquire)) return false;
+    const uint64_t start = g_arenaWaitStartTimeUs.load(std::memory_order_relaxed);
+    const uint64_t now = pacing::Microseconds();
+    if (now - start >= maxWaitUs)
+    {
+        outSeq = g_arenaWaitNeededSeq.load(std::memory_order_relaxed);
+        outPos = g_arenaWaitNeededPos.load(std::memory_order_relaxed);
+        return true;
+    }
+    return false;
+}
+
 // D3D9's wait for arena space, which is where the block the command processor
 // reports its progress through is learnt (arena.cpp): the device holds a
 // pointer to it, and it holds a sequence counter at +0 and a position at +4.
@@ -67,7 +89,15 @@ GUEST_HOOK(T_D3D_ArenaWait)
     constexpr uint32_t kProgressBlock = 10896;   // in D3D9's device structure
     if (const uint32_t block = *GuestPtr<be32>(ctx.r3.u32 + kProgressBlock))
         gpu::SetArenaProgressBlock(block);
+
+    g_arenaWaitNeededPos.store(ctx.r4.u32, std::memory_order_relaxed);
+    g_arenaWaitNeededSeq.store(ctx.r5.u32, std::memory_order_relaxed);
+    g_arenaWaitStartTimeUs.store(pacing::Microseconds(), std::memory_order_relaxed);
+    g_arenaWaitActive.store(true, std::memory_order_release);
+
     GUEST_ORIG(T_D3D_ArenaWait)(ctx, base);
+
+    g_arenaWaitActive.store(false, std::memory_order_release);
 }
 
 #if MW2_DIAGNOSTICS

@@ -41,34 +41,31 @@ namespace vk::renderer::detail
     // The file holds 512 vec4 and a stage sees 256 from wherever its base says --
     // for a pixel shader usually 256, so uploading the low half twice would hand
     // it the vertex shader's constants.
-    // `needed` is how many of the 256 the shader reads. The uniform block is
-    // still declared as all 256 and the descriptor range is still 4 KB, so what
-    // sits above the copy is whatever the arena held -- which the shader never
-    // reads. That is why each slot keeps 4 KB of headroom.
+    // The uniform block descriptor range is the full 256 vec4 (4 KB). Skinned
+    // models, light grid spherical harmonic probes, and mobile Mali GPU vectorised
+    // uniform loads require the full 256-vec4 window to be fully populated so
+    // lighting and bone constants are never truncated or read as uninitialised.
     uint32_t WriteConstantWindow(const gpu::RegisterFile& r, uint32_t windowRegister,
-                                 uint32_t slot, uint32_t needed)
+                                 uint32_t slot, uint32_t /*needed*/)
     {
         const gpu::ConstantWindow window{ r[windowRegister] };
         const uint32_t base = std::min(window.Base(), 256u);
         const uint32_t first = gpu::kConstantBaseAlu + base * 4;
+        constexpr uint32_t kWindowCount = 256;
+        constexpr uint32_t bytes = kWindowCount * 16;
 
         State::Cached& cache = g.constantWindows[slot];
-        // The cached copy covers `cache.count` of them; it serves this draw if
-        // it reaches far enough and none of what it holds has been written
-        // since. Stamping only the copied range, rather than all 256, means a
-        // write to a constant nobody in this window reads does not throw it out.
-        if (cache.valid && cache.base == base && cache.count >= needed &&
-            cache.stamp == r.StampOf(first, cache.count * 4))
+        if (cache.valid && cache.base == base &&
+            cache.stamp == r.StampOf(first, kWindowCount * 4))
         {
-            g.arenaReused[kArenaConstants] += needed * 16;
+            g.arenaReused[kArenaConstants] += bytes;
             return cache.at;
         }
 
-        const uint32_t bytes = needed * 16;
         const uint32_t at = Allocate(bytes, kArenaConstants);
         if (at == UINT32_MAX) return at;
         std::memcpy(g.arenaMapped + at, &r.values[first], bytes);
-        cache = { r.StampOf(first, needed * 4), base, at, true, needed };
+        cache = { r.StampOf(first, kWindowCount * 4), base, at, true, kWindowCount };
         return at;
     }
 
