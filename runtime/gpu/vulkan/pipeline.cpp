@@ -583,6 +583,24 @@ namespace
     // pipelines that share shaders) but do not save it to disk for Mali.
     bool IsMali() { return g.deviceProperties.vendorID == 0x13B5; }
 
+    // Whether this GPU's VkPipelineCache is persisted to disk across sessions.
+    // Mali has historically had driver bugs with cross-session cache blobs, so
+    // we create and use the cache within a session (which allows ISA reuse
+    // between pipelines that share shaders) but do not save it to disk by
+    // default. MW2_PERSIST_PIPELINE_CACHE=1 overrides: the test reports of
+    // Poco X6 Pro (Mali-G615, driver 1.3.247) show every run recompiling
+    // hundreds of pipelines at 300-464 ms as the training level loads, which
+    // is what stalls the GPU thread behind its guest waits long enough for
+    // the title to error out -- worth a player let-in even against the
+    // historical driver bug. If the driver rejects a loaded blob, CreateCache
+    // logs it and falls back to an empty cache, so the failure is soft.
+    bool PersistCache()
+    {
+        static const bool asked = env::Flag("MW2_PERSIST_PIPELINE_CACHE");
+        if (asked) LOGI("pipeline: persisting the pipeline cache across runs (user request) on %04X", g.deviceProperties.vendorID);
+        return !IsMali() || asked;
+    }
+
     void CreateCache()
     {
         std::lock_guard lock(vk::pipeline::CacheMutex());
@@ -593,9 +611,11 @@ namespace
         }
 
         std::vector<uint8_t> initial;
-        // Mali: skip disk-load to avoid cross-session driver instability,
-        // but still create an in-session cache for ISA reuse.
-        if (!IsMali())
+        // Mali: skip disk-load by default to avoid cross-session driver
+        // instability, but still create an in-session cache for ISA reuse.
+        // MW2_PERSIST_PIPELINE_CACHE=1 asks for the disk blob back (see
+        // PersistCache above).
+        if (PersistCache())
         {
             if (const char* path = CachePath())
             {
@@ -649,7 +669,8 @@ namespace
         }
         else
         {
-            LOGI("pipeline: Mali GPU detected -- using in-session VkPipelineCache (no disk persistence)");
+            LOGI("pipeline: Mali GPU detected -- using in-session VkPipelineCache only;"
+                 " set MW2_PERSIST_PIPELINE_CACHE=1 to keep the disk blob across runs");
         }
 
         VkPipelineCacheCreateInfo info{ VK_STRUCTURE_TYPE_PIPELINE_CACHE_CREATE_INFO };
@@ -671,8 +692,9 @@ namespace
     void SaveCache()
     {
         std::lock_guard lock(vk::pipeline::CacheMutex());
-        // Do not persist cache blobs to disk on Mali -- in-session use only.
-        if (IsMali()) return;
+        // Do not persist cache blobs to disk on Mali by default --
+        // in-session use only. MW2_PERSIST_PIPELINE_CACHE=1 keeps saving.
+        if (!PersistCache()) return;
         const char* path = CachePath();
         if (!path || !g.cache) return;
         size_t size = 0;
