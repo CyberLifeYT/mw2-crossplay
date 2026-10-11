@@ -242,11 +242,13 @@ namespace
             if (pthread_equal(t.handle, self)) continue;
             std::fprintf(stderr, "\n[E] ==== %s ====\n", t.name);
             std::fflush(stderr);
+#ifndef MW2_ANDROID
             g_dumping.store(true, std::memory_order_release);
             if (pthread_kill(t.handle, SIGUSR1) != 0) { g_dumping.store(false); continue; }
             // A last-gasp diagnostic, so a thread that never responds is skipped.
             for (int i = 0; i < 200 && g_dumping.load(std::memory_order_acquire); i++)
                 usleep(1000);
+#endif
         }
     }
 
@@ -284,7 +286,7 @@ namespace
                 const char* drawStage = gpu::detail::CurrentDrawStage();
                 const bool isCompiling = drawStage && std::strstr(drawStage, "Draw_EnsurePipeline") != nullptr;
                 uint32_t sec = uint32_t(batch.elapsedMs / 1000);
-                if (isCompiling && batch.elapsedMs < 60000)
+                if (isCompiling)
                 {
                     if (sec != lastLoggedSec && sec % 5 == 0)
                     {

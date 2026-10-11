@@ -645,9 +645,13 @@ namespace vk::renderer::detail
 
         g.prewarmWanted = uint32_t(wanted.size());
         const bool hasFastLibraries = vk::pipeline::PipelineLibraries();
+        constexpr uint32_t kMaxSyncPrewarm = 15;
+        const auto syncDeadline = start + std::chrono::milliseconds(250);
         uint32_t last = 0;
-        for (const Recorded& want : wanted)
+
+        for (size_t i = 0; i < wanted.size(); i++)
         {
+            const Recorded& want = wanted[i];
             auto vertex = g.shaders.find(want.vertexShader);
             auto pixel = g.shaders.find(want.pixelShader);
             if (vertex == g.shaders.end() || pixel == g.shaders.end() ||
@@ -668,14 +672,33 @@ namespace vk::renderer::detail
                 key.modeCntl = want.modeCntl;
             }
 
-            if (EnsurePipeline(key, vertex->second, pixel->second)) g.prewarmed++;
             g.recorded.push_back(want);
 
-            const uint32_t percent = 100 * (&want - wanted.data() + 1) / uint32_t(wanted.size());
-            if (percent >= last + 25) { LOGI("compiling shaders: %u%%", percent); last = percent; }
+            const bool syncCandidate = (i < kMaxSyncPrewarm) &&
+                                       (hasFastLibraries || std::chrono::steady_clock::now() < syncDeadline);
+            if (syncCandidate)
+            {
+                if (EnsurePipeline(key, vertex->second, pixel->second)) g.prewarmed++;
+                const uint32_t percent = 100 * uint32_t(i + 1) / uint32_t(wanted.size());
+                if (percent >= last + 25) { LOGI("compiling shaders: %u%%", percent); last = percent; }
+            }
+            else
+            {
+                // Enqueue for background warmup scheduler
+                std::lock_guard lock(warmup::g_warmupMutex);
+                warmup::g_warmupQueue.push_back({ want });
+                warmup::g_statQueued.fetch_add(1, std::memory_order_relaxed);
+            }
         }
 
-        warmup::g_statQueued.store(uint32_t(wanted.size()), std::memory_order_relaxed);
+        if (!warmup::g_warmupQueue.empty())
+        {
+            LOGI("warmup: queued %u pipelines for background warmup during menus/cutscenes",
+                 warmup::g_statQueued.load(std::memory_order_relaxed));
+            StartWarmupScheduler();
+            warmup::g_warmupCv.notify_all();
+        }
+
         warmup::g_statCompleted.store(g.prewarmed, std::memory_order_relaxed);
 
         g.prewarmMicroseconds = uint64_t(std::chrono::duration_cast<std::chrono::microseconds>(

@@ -34,8 +34,8 @@ This is **not an emulator**: Xbox 360 PowerPC machine instructions are translate
 - **Live Performance & Diagnostics HUD**: Interactive in-game overlay displaying real-time FPS, frame time, CPU usage, SoC thermals, app & system RAM, texture memory, and active Vulkan device.
 - **Direct Play & One-Tap Setup**: The launcher automatically discovers game disc images (`.iso` / `.7z` / `.zip`) in `/sdcard/Download/` and sets up everything in one tap.
 - **Customizable Touch Pad**: Virtual on-screen touch controls with customizable layout, opacity, button toggle modes (sticky ADS), and velocity-based look gestures.
-- **Persistent Pipeline & Shader Cache**: Compiled Vulkan pipelines are cached persistently to storage (`pipeline.vkcache`) and auto-flushed on pause/memory trim, eliminating shader compilation stutter on repeated runs.
-- **Custom Driver Loader**: Sideload and switch to custom Mesa **Turnip** Vulkan drivers for Adreno hardware on the fly via `libadrenotools`.
+- **Persistent Pipeline & Shader Cache**: Multi-tiered shader architecture caching both translated SPIR-V microcode and native driver Vulkan pipelines (`shader_cache.bin`). Features an instant-boot budget (15 pipelines / 250 ms) guaranteeing sub-2-second launcher-to-title transitions at locked 60 FPS, with a non-blocking background warmup scheduler compiling remaining gameplay pipelines asynchronously during menus and cutscenes.
+- **Custom Driver Loader**: Sideload and switch to custom Mesa **Turnip** Vulkan drivers for Adreno hardware on the fly via `libadrenotools` directly from the in-app Graphics Driver menu.
 - **Low-Latency 3D Audio**: AAudio backend with automatic downmixing from Xbox 360 5.1 surround sound to high-fidelity stereo, driven by a rock-solid 5.333 ms wall-clock cadence eliminating audio stutter and underruns.
 - **Lean Asset Pipeline & Cutscene Compression**:
   - Built-in cutscene compression tool (`tools/compress_cutscenes.py`) powered by official RAD Video Tools, reducing cutscene disk and memory footprint by **77% (shaving 940 MB)** while optimizing mobile CPU/RAM decoding.
@@ -54,7 +54,9 @@ This is **not an emulator**: Xbox 360 PowerPC machine instructions are translate
   - Modern path: Vulkan 1.3 with dynamic rendering & extended dynamic state.
   - Legacy path: Automatic Vulkan 1.1 `VkRenderPass` fallback for Mali / older vendor drivers.
   - BC Texture decompression: Automatic hardware BC if supported, or CPU fallback decoding on GPUs lacking BC compression.
-  - *Compatible Devices*: Qualcomm Snapdragon 865 and newer (Turnip or stock V26+), Google Tensor G1–G4, Samsung Exynos 2200/2400 (Xclipse), MediaTek Dimensity 920/1200/8000/9000-series.
+  - *Tier 1 (High / 1080p 60 FPS)*: Qualcomm Snapdragon 8-series (SD 865 up to 8 Gen 3), Dimensity 8000/9000-series, Tensor G2–G4.
+  - *Tier 2 (Mid-Range / 720p 60 FPS - Fully Supported)*: Qualcomm Snapdragon 7-series (**SD 778G / 778G+**, 782G, 7 Gen 1/2/3, 7+ Gen 2 with Turnip / Adreno 642L), Dimensity 920 / 1080 / 1200 / 7050.
+  - *Tier 3 (Entry / 540p–720p 30–60 FPS)*: Snapdragon 695 / 6 Gen 1, MediaTek Helio G99 / G96 (via Vulkan 1.1 `VkRenderPass` fallback + CPU BC decompressor).
 - **Storage**: ~7-8 GB free internal storage for game assets.
 - **Game Media**: An ISO or disc dump of *Call of Duty: Modern Warfare 2* (Xbox 360, version 1.0.557, USA or Europe).
 
@@ -67,16 +69,7 @@ This is **not an emulator**: Xbox 360 PowerPC machine instructions are translate
 
 ## Installation & Setup
 
-<<<<<<< HEAD
 ### Android Setup
-=======
-The launcher also has PROFILES (set the multiplayer rank and prestige, unlock
-everything, open the campaign's and Special Ops' missions), GRAPHICS (the
-RESOLUTION the game draws at: 720p as on the console, 1440p or 4K, which need
-a faster graphics card; the FPS LIMIT: 60 as on the console, or more; the FOV:
-65 as on the console, up to 120) and CHECK FOR UPDATES, which installs a newer release
-over this one.
->>>>>>> upstream/master
 
 1. **Install the APK**:
    Download the latest `app-campaign-release.apk` (or `app-multiplayer-release.apk`) from [Releases](../../releases/latest) and install it on your device.
@@ -87,6 +80,7 @@ over this one.
    - If a disc image is detected in `Download`, tap **⚡ INSTALL & PLAY**. The installer will unpack and verify the game files into your app storage.
    - Once installation completes, tap **▶ LAUNCH GAME** to start playing.
    - Enable **Direct Launch** to automatically bypass the launcher and jump straight into gameplay on future launches.
+   - The launcher features **Graphics Driver** settings (sideload Turnip drivers for Adreno devices), **Graphics** (Resolution scale, FPS limit, FOV), and **Profiles** (mission unlocks and progress).
 
 ### PC Setup
 

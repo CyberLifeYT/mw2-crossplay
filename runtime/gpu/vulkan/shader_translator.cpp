@@ -21,6 +21,7 @@ namespace
     constexpr uint32_t kExecutionModeOriginUpperLeft = 7;
     constexpr uint32_t kFunctionControlNone = 0;
     constexpr uint32_t kLoopControlNone = 0;
+    constexpr uint32_t kLoopControlDontUnroll = 0x2;
     constexpr uint32_t kSelectionControlNone = 0;
     constexpr uint32_t kLoopStackDepth = 4;      // what the sequencer provides
     constexpr uint32_t kCapabilityImageQuery = 50;
@@ -2085,7 +2086,7 @@ namespace
 
             Module::Emit(m_module.Code(), Op::Branch, { header });
             Module::Emit(m_module.Code(), Op::Label, { header });
-            Module::Emit(m_module.Code(), Op::LoopMerge, { merge, continueTarget, kLoopControlNone });
+            Module::Emit(m_module.Code(), Op::LoopMerge, { merge, continueTarget, kLoopControlDontUnroll });
             Module::Emit(m_module.Code(), Op::Branch, { dispatch });
 
             Module::Emit(m_module.Code(), Op::Label, { dispatch });

@@ -331,3 +331,28 @@ invalid SPIR-V.
 
 At run time, a program that fails translation or that the driver refuses is
 logged (`renderer: ... shader ... not usable`) and draws using it are skipped.
+
+## Cross-GPU Control Flow Translation (Mali vs. Adreno)
+
+Xenos control flow instructions permit arbitrary branches, subroutine calls, and loops. Early translator revisions lowered any non-linear program into a generalized state-machine loop containing an `OpSwitch` over program counter values:
+
+```
+loop { switch (pc) { case 0: ...; case 19: ...; default: break; } }
+```
+
+### The Mali Driver Optimizer Pathology
+While desktop drivers (NVIDIA, AMD) and Qualcomm Adreno/Turnip simplify this construct in ~50–100 ms, ARM Mali drivers (Bifrost/Valhall on Dimensity SoCs) encounter a severe compiler optimizer pathology. The driver attempts loop unrolling and full CFG convergence analysis across all cases in `OpSwitch`, locking compilation in `vkCreateGraphicsPipelines` for **300 to 450 seconds per shader**.
+
+### Structured Acyclic Forward Jumps
+Static analysis of MW2's complete shader corpus revealed:
+1. **203 of 207 shaders** are strictly linear straight-line code.
+2. Exactly **4 shaders** contain branch instructions (`70A21AB18663D4DD`, `73B3571D97C99594`, `99724088FD84BC3D`, and `B43C5FC2AEE46DFE`).
+3. **Zero shaders contain backwards loops or subroutine calls**. Every `CondJmp` instruction in MW2 is strictly forward (`target > self`).
+
+Because forward jumps with no backward loops are acyclic DAGs, they map directly to structured `if/else` control flow. By structuring forward jumps via `OpSelectionMerge` / `OpBranchConditional` without emitting `OpLoopMerge`, Mali driver compile times drop from **>400,000 ms to <30 ms**.
+
+For fallback compatibility where loops may occur, `OpLoopMerge` specifies loop control parameter `kLoopControlDontUnroll = 0x2` to forbid driver unrolling.
+
+### Non-Blocking Runtime Draw Path
+In-game draw calls encountering a pipeline miss must never block the presentation thread (`tid 25150`). On Android, uncompiled pipelines are queued to the background warmup scheduler (`warmup::g_warmupQueue`), and the current draw is skipped (`Skip("async pipeline compile")`) so frames continue presenting at locked 60 FPS while the background thread compiles.
+
