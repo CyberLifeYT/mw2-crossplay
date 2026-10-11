@@ -13,6 +13,20 @@ namespace settings
     int Scale();
     void SetScale(int scale);
 
+    // MW2_FPS_LIMIT: how many frames a second the game draws at most; 60 is
+    // the console's own pacing and 0 no limit. HasFpsLimit is false until one
+    // is kept, and FpsLimit is 60 then, as the game takes it.
+    constexpr int kConsoleFps = 60;
+    bool HasFpsLimit();
+    int FpsLimit();
+    void SetFpsLimit(int limit);
+
+    // MW2_FOV: the game's field of view, as its own setting counts it -- the
+    // width of a 4:3 picture, 65 on the console.
+    constexpr int kConsoleFov = 65, kWidestFov = 120, kFovStep = 5;
+    int Fov();
+    void SetFov(int fov);
+
     // MW2_LAUNCHER_SOUNDS: 0 keeps the launcher's menus silent. Written by hand.
     bool Sounds();
 }

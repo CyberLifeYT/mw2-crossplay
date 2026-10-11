@@ -44,6 +44,32 @@ void settings::SetScale(int scale)
     Save();
 }
 
+bool settings::HasFpsLimit() { return g_kept.count("MW2_FPS_LIMIT") != 0; }
+
+int settings::FpsLimit()
+{
+    const auto kept = g_kept.find("MW2_FPS_LIMIT");
+    return kept == g_kept.end() ? kConsoleFps : std::clamp(std::atoi(kept->second.c_str()), 0, 1000);
+}
+
+void settings::SetFpsLimit(int limit)
+{
+    g_kept["MW2_FPS_LIMIT"] = std::to_string(limit);
+    Save();
+}
+
+int settings::Fov()
+{
+    const auto kept = g_kept.find("MW2_FOV");
+    return kept == g_kept.end() ? kConsoleFov : std::clamp(std::atoi(kept->second.c_str()), kConsoleFov, kWidestFov);
+}
+
+void settings::SetFov(int fov)
+{
+    g_kept["MW2_FOV"] = std::to_string(std::clamp(fov, kConsoleFov, kWidestFov));
+    Save();
+}
+
 bool settings::Sounds()
 {
     const auto kept = g_kept.find("MW2_LAUNCHER_SOUNDS");

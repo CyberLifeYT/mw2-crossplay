@@ -67,7 +67,16 @@ This is **not an emulator**: Xbox 360 PowerPC machine instructions are translate
 
 ## Installation & Setup
 
+<<<<<<< HEAD
 ### Android Setup
+=======
+The launcher also has PROFILES (set the multiplayer rank and prestige, unlock
+everything, open the campaign's and Special Ops' missions), GRAPHICS (the
+RESOLUTION the game draws at: 720p as on the console, 1440p or 4K, which need
+a faster graphics card; the FPS LIMIT: 60 as on the console, or more; the FOV:
+65 as on the console, up to 120) and CHECK FOR UPDATES, which installs a newer release
+over this one.
+>>>>>>> upstream/master
 
 1. **Install the APK**:
    Download the latest `app-campaign-release.apk` (or `app-multiplayer-release.apk`) from [Releases](../../releases/latest) and install it on your device.
@@ -93,12 +102,17 @@ The launcher also features PROFILES (set multiplayer rank and prestige, unlock e
 
 ### Android Touch Controls
 
-- **Left Stick**: Movement (walk/run).
-- **Right Area**: Fluid touch-drag camera look (velocity-based look curve).
-- **Action Buttons**: Jump, Crouch/Prone, Reload, Swap Weapon, Frag Grenade, Flashbang, Melee.
+- **Left Stick (LS)**: True analog joystick for player movement (walk/run).
+- **Right Stick (RS)**: True analog joystick for camera look & aiming.
+- **Action Buttons**: Xbox 360-styled ABXY jewel buttons (Jump, Crouch/Prone, Reload, Swap Weapon).
+- **Bumpers & Triggers**: LB (Tactical/Flashbang), RB (Lethal/Frag), LT (Aim Down Sights), RT (Fire).
+- **Click Actions & Menus**: L3 (Sprint), R3 (Melee), Start (Pause), Back (Scoreboard).
 - **ADS Toggle**: Tap the Aim button to aim down sights; can be configured as tap-to-toggle or hold-to-aim.
 - **Customize Layout**: Open pause menu → **Edit controls** to drag, resize, or adjust transparency of any button.
 - **Physical Gamepad**: Bluetooth or USB Xbox/PlayStation controllers are automatically detected.
+
+### PC Settings & Options
+**Settings**: `MW2_FULLSCREEN=1`, `MW2_SCALE=<2 or 3>` (what RESOLUTION sets), `MW2_FPS_LIMIT=<n>` (what FPS LIMIT sets; 0 is no limit), `MW2_FOV=<65 to 120>` (what FOV sets), `MW2_MSAA=<n>` or `MW2_NO_MSAA=1`, `MW2_NO_AUDIO=1`. Set them as environment variables, or keep them in a file named `.env` beside the executables, one per line.
 
 **Players & Profiles.** You are a profile, made the first time you play and named after your login; your rank is kept under it. The launcher's PROFILES screen renames it, and puts another profile in your place. On Steam other players see your Steam name. A second, third or fourth controller signs in on the game's sign-in screen, which opens where the game asks for it (SIGN IN PROFILE in split screen, SYSTEM LINK) or with the Guide button (or Back and Start together): choose a profile, which keeps its own rank and settings, or make a new one. Two copies of `mw2-mp` on one PC can play a SYSTEM LINK match, each with the controller that chose SYSTEM LINK in it.
 
