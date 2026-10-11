@@ -176,6 +176,23 @@ bool vk::pipeline::CreateDevice(void* physicalDevice, uint32_t family,
     // (Mali, etc.) require this feature to be explicitly enabled before creating BC images.
     enabled.textureCompressionBC = supported.textureCompressionBC;
     g.textureCompressionBC = supported.textureCompressionBC;
+    // Adreno's compressed-sampling path has a known BC1-with-1-bit-alpha flicker:
+    // surfaces sampling as black one frame and lit the next, missing geometry,
+    // and vertex garbage in vegetation. The screenshot ban against it is the
+    // same picture the Poco X6 Pro testers sent on Snapdragon devices that Mali
+    // phones never show. Mali keeps hardware BC; colour ranges, lighting and
+    // fog render identically with the hardware path there. Push Snapdragon
+    // devices to the software BC decoder, whose results are correct on both.
+    // MW2_FORCE_BC_HW=1 puts it back when a driver proves clean.
+    // The env flag is also available to users who hit this on another GPU vendor.
+    if (g.deviceProperties.vendorID == 0x5143 && supported.textureCompressionBC &&
+        !env::Flag("MW2_FORCE_BC_HW"))
+    {
+        enabled.textureCompressionBC = VK_FALSE;
+        g.textureCompressionBC = false;
+        LOGW("vulkan: Adreno BC sampling disabled (known black/missing-geometry flicker);"
+             " textures decode in software -- MW2_FORCE_BC_HW=1 re-enables hardware BC");
+    }
     if (!supported.textureCompressionBC)
         LOGW("vulkan: the device does not report textureCompressionBC support");
     // The title's occlusion queries are a sample count it compares against a
