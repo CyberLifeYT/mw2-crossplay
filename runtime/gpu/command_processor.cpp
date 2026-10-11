@@ -249,6 +249,7 @@ namespace
     {
         if (!g.registers.InRange(index)) { g.registerWritesOutOfRange++; return; }
         g.registers.Write(index, value);
+        *GuestPtr<be32>(kRegisterAperture + index * 4) = value;
 
         // A scratch register whose bit is set in SCRATCH_UMSK is written back to
         // memory at SCRATCH_ADDR + 4n, as Xenia's command processor does. The
@@ -259,6 +260,36 @@ namespace
             const uint32_t n = index - kScratchReg0;
             const uint32_t umsk = RegisterOrAperture(kScratchUmsk);
             if (umsk & (1u << n)) WritePhysical(RegisterOrAperture(kScratchAddr) + n * 4, value);
+            return;
+        }
+
+        // When SCRATCH_UMSK is written, write back any scratch registers whose bit is set.
+        if (index == kScratchUmsk)
+        {
+            const uint32_t scratchAddr = RegisterOrAperture(kScratchAddr);
+            if (scratchAddr)
+            {
+                for (uint32_t n = 0; n < 8; n++)
+                {
+                    if (value & (1u << n))
+                        WritePhysical(scratchAddr + n * 4, g.registers[kScratchReg0 + n]);
+                }
+            }
+            return;
+        }
+
+        // When SCRATCH_ADDR is written, write back enabled scratch registers to the new address.
+        if (index == kScratchAddr)
+        {
+            const uint32_t umsk = RegisterOrAperture(kScratchUmsk);
+            if (value && umsk)
+            {
+                for (uint32_t n = 0; n < 8; n++)
+                {
+                    if (umsk & (1u << n))
+                        WritePhysical(value + n * 4, g.registers[kScratchReg0 + n]);
+                }
+            }
             return;
         }
 
@@ -521,9 +552,9 @@ namespace
         bool matched = false;
         constexpr auto kTimeout =
 #ifdef MW2_ANDROID
-            std::chrono::milliseconds(15000);
+            std::chrono::milliseconds(2000);
 #else
-            std::chrono::milliseconds(5000);
+            std::chrono::milliseconds(2000);
 #endif
         while (Running())
         {

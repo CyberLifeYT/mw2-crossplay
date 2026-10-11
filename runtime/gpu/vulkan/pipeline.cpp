@@ -528,65 +528,79 @@ namespace
         uint64_t dataSize = 0;
     };
 
+    // Whether this GPU's VkPipelineCache is persisted to disk across sessions.
+    // Mali has historically had driver bugs with cross-session cache blobs, so we
+    // create and use the cache within a session (which allows ISA reuse between
+    // pipelines that share shaders) but do not save it to disk for Mali.
+    bool IsMali() { return g.deviceProperties.vendorID == 0x13B5; }
+
     void CreateCache()
     {
         std::lock_guard lock(vk::pipeline::CacheMutex());
-        if (g.deviceProperties.vendorID == 0x13B5 || env::Flag("MW2_NO_PIPELINE_CACHE"))
+        if (env::Flag("MW2_NO_PIPELINE_CACHE"))
         {
-            LOGI("pipeline: persistent VkPipelineCache bypassed (ARM Mali GPU %04X or MW2_NO_PIPELINE_CACHE)",
-                 g.deviceProperties.vendorID);
+            LOGI("pipeline: VkPipelineCache bypassed (MW2_NO_PIPELINE_CACHE)");
             return;
         }
 
         std::vector<uint8_t> initial;
-        if (const char* path = CachePath())
+        // Mali: skip disk-load to avoid cross-session driver instability,
+        // but still create an in-session cache for ISA reuse.
+        if (!IsMali())
         {
-            LOGI("pipeline: checking persistent pipeline cache at: %s", path);
-            if (std::FILE* f = std::fopen(path, "rb"))
+            if (const char* path = CachePath())
             {
-                std::fseek(f, 0, SEEK_END);
-                const long fileSize = std::ftell(f);
-                std::fseek(f, 0, SEEK_SET);
-
-                if (fileSize > (long)sizeof(PipelineCacheHeader) && fileSize <= 64 * 1024 * 1024)
+                LOGI("pipeline: checking persistent pipeline cache at: %s", path);
+                if (std::FILE* f = std::fopen(path, "rb"))
                 {
-                    PipelineCacheHeader header{};
-                    if (std::fread(&header, sizeof(header), 1, f) == 1)
-                    {
-                        const bool valid = (header.magic == 0x32435056 &&
-                                            header.version == 1 &&
-                                            header.vendorID == g.deviceProperties.vendorID &&
-                                            header.deviceID == g.deviceProperties.deviceID &&
-                                            header.driverVersion == g.deviceProperties.driverVersion &&
-                                            std::memcmp(header.pipelineCacheUUID, g.deviceProperties.pipelineCacheUUID, VK_UUID_SIZE) == 0 &&
-                                            header.dataSize == (uint64_t)(fileSize - sizeof(PipelineCacheHeader)));
+                    std::fseek(f, 0, SEEK_END);
+                    const long fileSize = std::ftell(f);
+                    std::fseek(f, 0, SEEK_SET);
 
-                        if (valid)
+                    if (fileSize > (long)sizeof(PipelineCacheHeader) && fileSize <= 64 * 1024 * 1024)
+                    {
+                        PipelineCacheHeader header{};
+                        if (std::fread(&header, sizeof(header), 1, f) == 1)
                         {
-                            initial.resize(header.dataSize);
-                            if (std::fread(initial.data(), 1, header.dataSize, f) == header.dataSize)
+                            const bool valid = (header.magic == 0x32435056 &&
+                                                header.version == 1 &&
+                                                header.vendorID == g.deviceProperties.vendorID &&
+                                                header.deviceID == g.deviceProperties.deviceID &&
+                                                header.driverVersion == g.deviceProperties.driverVersion &&
+                                                std::memcmp(header.pipelineCacheUUID, g.deviceProperties.pipelineCacheUUID, VK_UUID_SIZE) == 0 &&
+                                                header.dataSize == (uint64_t)(fileSize - sizeof(PipelineCacheHeader)));
+
+                            if (valid)
                             {
-                                LOGI("pipeline: verified valid cache header for GPU %04X:%04X driver %08X (%zu KB payload)",
-                                     header.vendorID, header.deviceID, header.driverVersion, initial.size() / 1024);
+                                initial.resize(header.dataSize);
+                                if (std::fread(initial.data(), 1, header.dataSize, f) == header.dataSize)
+                                {
+                                    LOGI("pipeline: verified valid cache header for GPU %04X:%04X driver %08X (%zu KB payload)",
+                                         header.vendorID, header.deviceID, header.driverVersion, initial.size() / 1024);
+                                }
+                                else
+                                {
+                                    initial.clear();
+                                    LOGW("pipeline: truncated cache payload in %s, starting empty", path);
+                                }
                             }
                             else
                             {
-                                initial.clear();
-                                LOGW("pipeline: truncated cache payload in %s, starting empty", path);
+                                LOGW("pipeline: cache header in %s invalidated (driver/device update or UUID mismatch), starting fresh", path);
                             }
                         }
-                        else
-                        {
-                            LOGW("pipeline: cache header in %s invalidated (driver/device update or UUID mismatch), starting fresh", path);
-                        }
                     }
+                    else if (fileSize > 0)
+                    {
+                        LOGW("pipeline: cache file %s size invalid (%ld bytes), ignoring", path, fileSize);
+                    }
+                    std::fclose(f);
                 }
-                else if (fileSize > 0)
-                {
-                    LOGW("pipeline: cache file %s size invalid (%ld bytes), ignoring", path, fileSize);
-                }
-                std::fclose(f);
             }
+        }
+        else
+        {
+            LOGI("pipeline: Mali GPU detected -- using in-session VkPipelineCache (no disk persistence)");
         }
 
         VkPipelineCacheCreateInfo info{ VK_STRUCTURE_TYPE_PIPELINE_CACHE_CREATE_INFO };
@@ -608,6 +622,8 @@ namespace
     void SaveCache()
     {
         std::lock_guard lock(vk::pipeline::CacheMutex());
+        // Do not persist cache blobs to disk on Mali -- in-session use only.
+        if (IsMali()) return;
         const char* path = CachePath();
         if (!path || !g.cache) return;
         size_t size = 0;
@@ -747,7 +763,8 @@ void*    vk::pipeline::SetLayout(uint32_t set) { return set < 3 ? g.sets[set] : 
 void*    vk::pipeline::Layout() { return g.layout; }
 void*    vk::pipeline::Cache()
 {
-    if (g.deviceProperties.vendorID == 0x13B5) return nullptr; // ARM Mali
+    // Mali: return the handle for in-session ISA reuse.
+    // (Not persisted to disk -- see SaveCache above.)
     static const bool noCache = env::Flag("MW2_NO_PIPELINE_CACHE");
     if (noCache) return nullptr;
     return g.cache;

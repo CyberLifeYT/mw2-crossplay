@@ -212,6 +212,12 @@ namespace vk::renderer::detail
                 VkSubmitInfo emptySubmit{ VK_STRUCTURE_TYPE_SUBMIT_INFO };
                 vkQueueSubmit(queue, 1, &emptySubmit, fence);
             }
+            else
+            {
+                // Let the warmup thread know the GPU is being used for rendering
+                // so it can throttle pipeline compilation (backpressure).
+                NoteRenderSubmit();
+            }
         });
         slot.inFlight = true;
         slot.serial = ++g.submissionSerial;

@@ -351,6 +351,7 @@ namespace vk::renderer::detail
         }
         const uint64_t tookMs = uint64_t(std::chrono::duration_cast<std::chrono::milliseconds>(
             std::chrono::steady_clock::now() - compileStart).count());
+        gpu::detail::SetCurrentDrawStage("idle");
         if (res != VK_SUCCESS)
         {
             LOGE("renderer: vkCreateGraphicsPipelines failed: %d (colour=%d, depth=%d, topo=%u, samples=%u) in %llu ms",
@@ -430,6 +431,34 @@ namespace vk::renderer::detail
         std::atomic<uint32_t> g_statCompleted{ 0 };
         std::atomic<uint32_t> g_statMisses{ 0 };
         std::atomic<uint32_t> g_statLastCompileMs{ 0 };
+
+        // Millisecond timestamp (steady_clock epoch) of the last render-thread
+        // vkQueueSubmit. The warmup worker reads this to back off when the GPU
+        // is busy serving render frames -- preventing the queue-saturation stalls
+        // that trigger the device's ANR watchdog (Oppo Athena).
+        std::atomic<int64_t> g_lastRenderSubmitMs{ 0 };
+
+        // Records the render thread's submission time. Called from renderer_frame.cpp.
+        void NoteRenderSubmit()
+        {
+            using namespace std::chrono;
+            const int64_t ms = duration_cast<milliseconds>(
+                steady_clock::now().time_since_epoch()).count();
+            g_lastRenderSubmitMs.store(ms, std::memory_order_relaxed);
+        }
+
+        // True if the render thread has submitted a frame recently enough that the
+        // GPU is likely still busy with rendering work.
+        bool RenderActive()
+        {
+            using namespace std::chrono;
+            const int64_t nowMs = duration_cast<milliseconds>(
+                steady_clock::now().time_since_epoch()).count();
+            const int64_t lastMs = g_lastRenderSubmitMs.load(std::memory_order_relaxed);
+            // 150 ms: about 9 frames at 60 FPS. If we haven't heard from the
+            // render thread in that window, assume it is idling (cutscene load).
+            return (nowMs - lastMs) < 150;
+        }
 
         void Worker()
         {
@@ -518,9 +547,41 @@ namespace vk::renderer::detail
                     }
                 }
 
-                // Yield to prevent thermal spikes and GPU driver queue starvation
-                const int sleepMs = warmup::g_cutsceneActive.load(std::memory_order_relaxed) ? 10 : 35;
+                // Backpressure: when the render thread is actively submitting
+                // frames the GPU command queue is shared and can saturate,
+                // causing vkQueueSubmit on the render thread to block for 100-
+                // 700 ms -- which trips the OS ANR watchdog on this device.
+                //
+                // Strategy:
+                //  - Cutscene / loading (no render submissions): compile fast,
+                //    sleep only 10 ms between pipelines.
+                //  - Active gameplay (render submitting within last 150 ms):
+                //    sleep at least 200 ms regardless of compile time, to give
+                //    the GPU time to drain its render work between compilations.
+                //    If the last compilation was especially heavy (>150 ms on
+                //    the CPU side -- a sign the GPU was busy too), add an extra
+                //    cooldown proportional to that time.
+                //  - Default (render not recently active but not in cutscene):
+                //    sleep 35 ms.
+                int sleepMs;
+                if (warmup::g_cutsceneActive.load(std::memory_order_relaxed))
+                {
+                    sleepMs = 10;
+                }
+                else if (RenderActive())
+                {
+                    // Base 200 ms + half the compile time so a 500 ms compile
+                    // gives 450 ms of recovery rather than hammering immediately.
+                    sleepMs = 200 + int(tookMs / 2);
+                }
+                else
+                {
+                    sleepMs = 35;
+                }
                 std::this_thread::sleep_for(std::chrono::milliseconds(sleepMs));
+                if (sleepMs >= 200)
+                    LOGI("warmup: render-active backpressure -- slept %d ms after %u ms compile",
+                         sleepMs, tookMs);
             }
             LOGI("warmup: scheduler worker thread exiting");
         }
@@ -580,6 +641,11 @@ namespace vk::renderer::detail
     void SetCutsceneActive(bool active)
     {
         warmup::g_cutsceneActive.store(active, std::memory_order_relaxed);
+    }
+
+    void NoteRenderSubmit()
+    {
+        warmup::NoteRenderSubmit();
     }
 
     WarmupStats GetWarmupStats()

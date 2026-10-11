@@ -851,6 +851,7 @@ void vk::renderer::Draw(const gpu::RegisterFile& r, const DrawCall& call)
         colourTarget->framesWithColour++;
     g.drawsRecorded++;
     g.segmentDraws = true;
+    gpu::detail::SetCurrentDrawStage("idle");
 }
 
 #endif  // MW2_HAVE_VULKAN
