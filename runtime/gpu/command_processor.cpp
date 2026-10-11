@@ -519,12 +519,18 @@ namespace
         const auto began = std::chrono::steady_clock::now();
         const auto waited = [&] { return std::chrono::steady_clock::now() - began; };
         bool matched = false;
+        constexpr auto kTimeout =
+#ifdef MW2_ANDROID
+            std::chrono::milliseconds(15000);
+#else
+            std::chrono::milliseconds(5000);
+#endif
         while (Running())
         {
             DeliverOcclusionQueries();
             std::this_thread::sleep_for(std::chrono::microseconds(50));
             if (matches(current())) { matched = true; break; }
-            if (waited() > std::chrono::milliseconds(500)) break;
+            if (waited() > kTimeout) break;
         }
         const auto micros = std::chrono::duration_cast<std::chrono::microseconds>(waited()).count();
         g.regMemWaitMicros += uint64_t(micros);
@@ -532,8 +538,9 @@ namespace
         g.regMemTimeouts++;
         static uint32_t told = 0;
         if (told++ < 8)
-            LOGW("gpu: gave up after 500 ms waiting for %s %08X & %08X to compare"
+            LOGW("gpu: gave up after %lld ms waiting for %s %08X & %08X to compare"
                  " (function %u) with %08X; it holds %08X",
+                 (long long)std::chrono::duration_cast<std::chrono::milliseconds>(kTimeout).count(),
                  memory ? "memory" : "register", address, mask, info & 7, reference, current());
     }
 

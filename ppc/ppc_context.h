@@ -129,7 +129,14 @@ static inline uint64_t __builtin_rotateleft64(T x, S s) {
 #define PPC_LOOKUP_FUNC(x, y) *(PPCFunc**)(x + PPC_IMAGE_BASE + PPC_IMAGE_SIZE + (uint64_t(uint32_t(y) - PPC_CODE_BASE) * 2))
 
 #ifndef PPC_CALL_INDIRECT_FUNC
-#define PPC_CALL_INDIRECT_FUNC(x) (PPC_LOOKUP_FUNC(base, x))(ctx, base)
+#define PPC_CALL_INDIRECT_FUNC(x) \
+    do { \
+        const uint32_t mw2_addr = (uint32_t)(x); \
+        if (mw2_addr >= PPC_CODE_BASE && mw2_addr < (PPC_CODE_BASE + PPC_CODE_SIZE)) { \
+            PPCFunc* mw2_fn = PPC_LOOKUP_FUNC(base, mw2_addr); \
+            if (mw2_fn) mw2_fn(ctx, base); \
+        } \
+    } while (0)
 #endif
 
 typedef void PPCFunc(struct PPCContext& __restrict__ ctx, uint8_t* base);

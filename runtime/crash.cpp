@@ -397,16 +397,18 @@ void crash::Install()
 
 extern "C" void MW2ReportBadIndirectCall(unsigned int guestAddress)
 {
-    std::fprintf(stderr, "\n[E] ---- indirect call to %08X has no recompiled function ----\n", guestAddress);
+    std::fprintf(stderr, "\n[W] ---- indirect call to %08X has no recompiled function ----\n", guestAddress);
     if (guestAddress == 0)
-        std::fprintf(stderr, "[E] target is null: the guest read a function pointer that was never written\n");
+        std::fprintf(stderr, "[W] target is null: the guest read a function pointer that was never written\n");
     else if (guestAddress < PPC_CODE_BASE || guestAddress >= PPC_CODE_BASE + PPC_CODE_SIZE)
-        std::fprintf(stderr, "[E] target is outside the recompiled code range\n");
+        std::fprintf(stderr, "[W] target is outside the recompiled code range\n");
     else
-        std::fprintf(stderr, "[E] target is inside the code range but was not identified as a function start\n");
+        std::fprintf(stderr, "[W] target is inside the code range but was not identified as a function start\n");
     DumpBacktrace("indirect call backtrace");
+#ifndef MW2_ANDROID
     crash::OnFault();
     std::exit(4);
+#endif
 }
 #else
 // Windows: one vectored exception handler does what the signal handlers do --

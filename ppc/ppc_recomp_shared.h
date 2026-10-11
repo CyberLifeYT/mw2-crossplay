@@ -6,9 +6,14 @@
 extern "C" void MW2ReportBadIndirectCall(unsigned int guestAddress);
 #define PPC_CALL_INDIRECT_FUNC(x) \
     do { \
-        PPCFunc* mw2_target = PPC_LOOKUP_FUNC(base, x); \
-        if (!mw2_target) MW2ReportBadIndirectCall((unsigned int)(x)); \
-        mw2_target(ctx, base); \
+        const uint32_t mw2_addr = (uint32_t)(x); \
+        PPCFunc* mw2_target = (mw2_addr >= PPC_CODE_BASE && mw2_addr < (PPC_CODE_BASE + PPC_CODE_SIZE)) \
+            ? PPC_LOOKUP_FUNC(base, mw2_addr) : nullptr; \
+        if (!mw2_target) { \
+            MW2ReportBadIndirectCall(mw2_addr); \
+        } else { \
+            mw2_target(ctx, base); \
+        } \
     } while (0)
 #endif
 
