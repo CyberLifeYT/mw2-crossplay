@@ -88,3 +88,9 @@ rad_installer.exe
 *.txt
 !CMakeLists.txt
 !requirements.txt
+
+# ---- local inspection dumps and test artifacts ----
+/ucode_dump/
+/*.png
+/*.spv
+
