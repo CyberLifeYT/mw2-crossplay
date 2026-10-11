@@ -509,9 +509,23 @@ void vk::renderer::Draw(const gpu::RegisterFile& r, const DrawCall& call)
     }
     gpu::detail::SetCurrentDrawStage("Draw_EnsurePipeline");
     bool newPipeline = false;
+#ifdef MW2_ANDROID
+    VkPipeline built = FindPipeline(key);
+    if (!built)
+    {
+        Recorded rec{ key.vertexShader, key.pixelShader,
+                      uint32_t(colourTarget->format), uint32_t(depthTarget->format),
+                      key.topology, depthControl, key.blendControl,
+                      key.colourMask, modeCntl, key.samples };
+        EnqueuePipelineWarmup(rec, /*highPriority=*/true);
+        Skip("pipeline compiling asynchronously in background");
+        return;
+    }
+#else
     VkPipeline built = [&] { Stopwatch watch(g.pipelineNanoseconds);
                              return EnsurePipeline(key, *vertex, *pixel, &newPipeline); }();
     if (!built) { Skip("pipeline rejected"); return; }
+#endif
     if (newPipeline && ShaderCachePath())
     {
         g.recorded.push_back({ key.vertexShader, key.pixelShader,

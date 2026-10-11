@@ -363,6 +363,15 @@ namespace vk::renderer::detail
         return built;
     }
 
+    VkPipeline FindPipeline(const PipelineKey& key)
+    {
+        TakeOptimisedPipelines();
+        std::lock_guard lock(g_pipelinesMutex);
+        auto found = g.pipelines.find(key);
+        if (found != g.pipelines.end()) return found->second;
+        return VK_NULL_HANDLE;
+    }
+
     VkPipeline EnsurePipeline(const PipelineKey& key, const Shader& vertex, const Shader& pixel,
                               bool* made)
     {
@@ -516,6 +525,35 @@ namespace vk::renderer::detail
         warmup::g_warmupStopping.store(false);
         warmup::g_warmupRunning.store(true);
         warmup::g_warmupThread = std::thread(warmup::Worker);
+    }
+
+    void EnqueuePipelineWarmup(const Recorded& rec, bool highPriority)
+    {
+        {
+            std::lock_guard lock(warmup::g_warmupMutex);
+            for (const auto& item : warmup::g_warmupQueue)
+            {
+                if (item.recorded.vertexShader == rec.vertexShader &&
+                    item.recorded.pixelShader == rec.pixelShader &&
+                    item.recorded.colourFormat == rec.colourFormat &&
+                    item.recorded.depthFormat == rec.depthFormat &&
+                    item.recorded.topology == rec.topology &&
+                    item.recorded.blendControl == rec.blendControl &&
+                    item.recorded.colourMask == rec.colourMask &&
+                    item.recorded.modeCntl == rec.modeCntl &&
+                    item.recorded.depthControl == rec.depthControl)
+                {
+                    return;
+                }
+            }
+            if (highPriority)
+                warmup::g_warmupQueue.push_front({ rec });
+            else
+                warmup::g_warmupQueue.push_back({ rec });
+            warmup::g_statQueued.fetch_add(1, std::memory_order_relaxed);
+        }
+        StartWarmupScheduler();
+        warmup::g_warmupCv.notify_all();
     }
 
     void StopWarmupScheduler()

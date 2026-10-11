@@ -703,9 +703,10 @@ namespace vk::renderer::detail
     DepthTests DepthTestsFor(uint32_t depthControl);
     // The culling and winding PA_SU_SC_MODE_CNTL asks for.
     void FacesFor(uint32_t modeCntl, VkCullModeFlags& cull, VkFrontFace& front);
-    // `made` says whether this call built it.
     VkPipeline EnsurePipeline(const PipelineKey& key, const Shader& vertex, const Shader& pixel,
                               bool* made = nullptr);
+    VkPipeline FindPipeline(const PipelineKey& key);
+    void EnqueuePipelineWarmup(const Recorded& rec, bool highPriority = false);
     const char* ShaderCachePath();
     void WriteShaderCache();
     void PrewarmFromCache();

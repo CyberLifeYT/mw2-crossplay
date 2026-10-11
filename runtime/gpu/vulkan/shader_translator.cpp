@@ -144,6 +144,7 @@ namespace
         Id m_boolConstants = 0;       // the 256 boolean constants, as 8 dwords
         Id m_loopConstants = 0;       // the 32 loop constants, one dword each
         bool m_linear = false;        // true if control flow has no loops, jumps or calls
+        bool m_forwardJumpsOnly = false; // true if control flow has only forward jumps (acyclic, no loops)
 
         // Sequencer state, in function variables because the dispatch loop reads
         // and writes it across blocks.
@@ -230,8 +231,11 @@ namespace
     void Translator::Analyze()
     {
         m_linear = true;
-        for (const ControlFlow& cf : m_flow)
+        m_forwardJumpsOnly = true;
+        uint32_t jumps = 0;
+        for (uint32_t i = 0; i < m_flow.size(); i++)
         {
+            const ControlFlow& cf = m_flow[i];
             switch (cf.Opcode())
             {
             case ControlFlowOpcode::Nop:
@@ -246,12 +250,20 @@ namespace
             case ControlFlowOpcode::CondExecPredClean:
             case ControlFlowOpcode::CondExecPredCleanEnd:
                 break;
+            case ControlFlowOpcode::CondJmp:
+                m_linear = false;
+                jumps++;
+                if (cf.Target() <= i)
+                    m_forwardJumpsOnly = false; // backward jump or self-loop
+                break;
             default:
                 m_linear = false;
+                m_forwardJumpsOnly = false;
                 break;
             }
-            if (!m_linear) break;
         }
+        if (jumps == 0 && m_linear)
+            m_forwardJumpsOnly = false;
 
         uint32_t lastSlot = bindings::kFetchSlots;
         for (const ControlFlow& cf : m_flow)
@@ -1747,7 +1759,8 @@ namespace
                          { uintPointer, slot, uint32_t(StorageClass::Function), zero });
             Module::EmitString(m_module.Debug(), Op::Name, { slot }, name);
         };
-        if (!m_linear) scalar(m_pc, "pc");
+        const bool needsSequencer = !m_linear && !m_forwardJumpsOnly;
+        if (needsSequencer) scalar(m_pc, "pc");
         scalar(m_lastFetchBase, "vertex_fetch_address");
         scalar(m_lastFetchEndian, "vertex_fetch_endian");
 
@@ -1757,7 +1770,7 @@ namespace
                      { floatPointer, m_previousScalar, uint32_t(StorageClass::Function),
                        m_module.ConstantF(0.0f) });
         Module::EmitString(m_module.Debug(), Op::Name, { m_previousScalar }, "previous_scalar");
-        if (!m_linear)
+        if (needsSequencer)
         {
             scalar(m_loopDepth, "loop_depth");
             scalar(m_callDepth, "call_depth");
@@ -1788,7 +1801,7 @@ namespace
                        m_module.ConstantFalseValue() });
         Module::EmitString(m_module.Debug(), Op::Name, { m_killed }, "killed");
 
-        if (!m_linear)
+        if (needsSequencer)
         {
             Id stack = m_module.ArrayOf(m_uint, kLoopStackDepth);
             Id stackPointer = m_module.Pointer(StorageClass::Function, stack);
@@ -2061,6 +2074,52 @@ namespace
                 EmitControlFlow(m_flow[i], i);
                 if (!m_result.error.empty()) return;
                 if (m_flow[i].IsEnd()) break;
+            }
+        }
+        else if (m_forwardJumpsOnly)
+        {
+            // Lower acyclic forward jumps into structured OpSelectionMerge branches
+            // without emitting OpLoopMerge or OpSwitch. This drops Mali driver compile times from 400s to <30ms!
+            uint32_t i = 0;
+            while (i < caseCount)
+            {
+                const ControlFlow& cf = m_flow[i];
+                if (cf.Opcode() == ControlFlowOpcode::CondJmp)
+                {
+                    const uint32_t target = cf.Target();
+                    Id taken = JumpTaken(cf);
+                    if (!taken)
+                    {
+                        i = target;
+                        continue;
+                    }
+
+                    Id mergeBlock = m_module.Allocate();
+                    Id thenBlock = m_module.Allocate();
+                    Id notTaken = Emit(Op::LogicalNot, m_bool, { taken });
+
+                    Module::Emit(m_module.Code(), Op::SelectionMerge, { mergeBlock, kSelectionControlNone });
+                    Module::Emit(m_module.Code(), Op::BranchConditional, { notTaken, thenBlock, mergeBlock });
+
+                    Module::Emit(m_module.Code(), Op::Label, { thenBlock });
+                    for (uint32_t j = i + 1; j < target && j < caseCount; j++)
+                    {
+                        EmitControlFlow(m_flow[j], j);
+                        if (!m_result.error.empty()) return;
+                        if (m_flow[j].IsEnd()) break;
+                    }
+                    Module::Emit(m_module.Code(), Op::Branch, { mergeBlock });
+
+                    Module::Emit(m_module.Code(), Op::Label, { mergeBlock });
+                    i = target;
+                }
+                else
+                {
+                    EmitControlFlow(cf, i);
+                    if (!m_result.error.empty()) return;
+                    if (cf.IsEnd()) break;
+                    i++;
+                }
             }
         }
         else
