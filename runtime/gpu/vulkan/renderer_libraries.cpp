@@ -71,8 +71,16 @@ namespace
         VkPipeline made = VK_NULL_HANDLE;
         VkResult res = VK_SUCCESS;
         {
-            std::lock_guard cacheLock(vk::pipeline::CacheMutex());
-            res = vkCreateGraphicsPipelines(g.device, Cache(), 1, &info, nullptr, &made);
+            void* pCache = Cache();
+            if (pCache)
+            {
+                std::lock_guard cacheLock(vk::pipeline::CacheMutex());
+                res = vkCreateGraphicsPipelines(g.device, static_cast<VkPipelineCache>(pCache), 1, &info, nullptr, &made);
+            }
+            else
+            {
+                res = vkCreateGraphicsPipelines(g.device, VK_NULL_HANDLE, 1, &info, nullptr, &made);
+            }
         }
         if (res != VK_SUCCESS)
             return VK_NULL_HANDLE;
@@ -150,9 +158,18 @@ namespace
         info.layout = Layout();
         VkPipeline made = VK_NULL_HANDLE;
         {
-            std::lock_guard cacheLock(vk::pipeline::CacheMutex());
-            if (vkCreateGraphicsPipelines(g.device, Cache(), 1, &info, nullptr, &made) != VK_SUCCESS)
-                return VK_NULL_HANDLE;
+            void* pCache = Cache();
+            if (pCache)
+            {
+                std::lock_guard cacheLock(vk::pipeline::CacheMutex());
+                if (vkCreateGraphicsPipelines(g.device, static_cast<VkPipelineCache>(pCache), 1, &info, nullptr, &made) != VK_SUCCESS)
+                    return VK_NULL_HANDLE;
+            }
+            else
+            {
+                if (vkCreateGraphicsPipelines(g.device, VK_NULL_HANDLE, 1, &info, nullptr, &made) != VK_SUCCESS)
+                    return VK_NULL_HANDLE;
+            }
         }
         return made;
     }

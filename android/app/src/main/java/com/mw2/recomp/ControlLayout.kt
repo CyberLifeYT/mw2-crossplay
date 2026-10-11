@@ -105,7 +105,7 @@ class ControlLayout private constructor(val elements: MutableList<ControlElement
 
     companion object {
         private const val FILE_NAME = "controls.json"
-        private const val FORMAT_VERSION = 1
+        private const val FORMAT_VERSION = 2
 
         fun load(context: Context): ControlLayout {
             val layout = defaults()
@@ -113,6 +113,12 @@ class ControlLayout private constructor(val elements: MutableList<ControlElement
             if (!file.exists()) return layout
             try {
                 val root = JSONObject(file.readText())
+                val version = root.optInt("version", 1)
+                if (version < FORMAT_VERSION) {
+                    // Automatically upgrade to authentic dual joystick layout
+                    try { file.delete() } catch (_: Throwable) {}
+                    return layout
+                }
                 val array = root.optJSONArray("elements") ?: return layout
                 for (i in 0 until array.length()) {
                     val item = array.optJSONObject(i) ?: continue
@@ -150,12 +156,17 @@ class ControlLayout private constructor(val elements: MutableList<ControlElement
                 // presses the button and a finger anywhere else turns the view.
                 ControlElement("look", ControlKind.LOOK, 0, "Look", 0.72f, 0.5f, 560f, 0.0f),
 
-                ControlElement("stick", ControlKind.STICK, 0, "Move", 0.14f, 0.72f, 150f, 0.40f),
+                // Left Stick (LS) - Movement
+                ControlElement("stick", ControlKind.STICK, 0, "LS", 0.14f, 0.72f, 150f, 0.40f),
+                // Right Stick (RS) - Camera Look
+                ControlElement("right_stick", ControlKind.STICK, 1, "RS", 0.72f, 0.74f, 145f, 0.40f),
+
                 ControlElement("dpad", ControlKind.DPAD, 0, "D-pad", 0.10f, 0.28f, 120f, 0.40f),
 
-                ControlElement("a", ControlKind.BUTTON, NativeBridge.A, "A", 0.905f, 0.80f, 62f),
-                ControlElement("b", ControlKind.BUTTON, NativeBridge.B, "B", 0.965f, 0.64f, 62f),
-                ControlElement("x", ControlKind.BUTTON, NativeBridge.X, "X", 0.845f, 0.64f, 62f),
+                // Face Buttons (ABXY Diamond above and right of RS)
+                ControlElement("a", ControlKind.BUTTON, NativeBridge.A, "A", 0.905f, 0.78f, 62f),
+                ControlElement("b", ControlKind.BUTTON, NativeBridge.B, "B", 0.965f, 0.63f, 62f),
+                ControlElement("x", ControlKind.BUTTON, NativeBridge.X, "X", 0.845f, 0.63f, 62f),
                 ControlElement("y", ControlKind.BUTTON, NativeBridge.Y, "Y", 0.905f, 0.48f, 62f),
 
                 // Fire and aim, where a phone's index fingers already are.
@@ -164,13 +175,12 @@ class ControlLayout private constructor(val elements: MutableList<ControlElement
                 ControlElement("rb", ControlKind.BUTTON, NativeBridge.RB, "RB", 0.845f, 0.18f, 60f),
                 ControlElement("lb", ControlKind.BUTTON, NativeBridge.LB, "LB", 0.155f, 0.18f, 60f),
 
-                // Sprint and melee: the stick clicks, which no thumb can do
-                // on glass, so they get buttons of their own.
-                ControlElement("l3", ControlKind.BUTTON, NativeBridge.L3, "Run", 0.285f, 0.83f, 58f),
-                ControlElement("r3", ControlKind.BUTTON, NativeBridge.R3, "Melee", 0.745f, 0.86f, 58f),
+                // Sprint and melee: the stick clicks
+                ControlElement("l3", ControlKind.BUTTON, NativeBridge.L3, "Run", 0.285f, 0.83f, 56f),
+                ControlElement("r3", ControlKind.BUTTON, NativeBridge.R3, "Melee", 0.885f, 0.92f, 56f),
 
-                ControlElement("start", ControlKind.BUTTON, NativeBridge.START, "Start", 0.60f, 0.07f, 48f, 0.35f),
-                ControlElement("back", ControlKind.BUTTON, NativeBridge.BACK, "Back", 0.40f, 0.07f, 48f, 0.35f),
+                ControlElement("start", ControlKind.BUTTON, NativeBridge.START, "Start", 0.58f, 0.07f, 46f, 0.35f),
+                ControlElement("back", ControlKind.BUTTON, NativeBridge.BACK, "Back", 0.42f, 0.07f, 46f, 0.35f),
             )
         )
     }

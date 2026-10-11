@@ -175,6 +175,8 @@ class TouchOverlayView @JvmOverloads constructor(
         var rightTrigger = 0
         var leftX = 0f
         var leftY = 0f
+        var rightX = 0f
+        var rightY = 0f
 
         for (element in layout.elements) {
             if (!element.visible) continue
@@ -188,8 +190,13 @@ class TouchOverlayView @JvmOverloads constructor(
                 ControlKind.STICK -> {
                     val position = stickPositions[element.id]
                     if (position != null) {
-                        leftX += position[0]
-                        leftY += position[1]
+                        if (element.value == 0) {
+                            leftX += position[0]
+                            leftY += position[1]
+                        } else {
+                            rightX += position[0]
+                            rightY += position[1]
+                        }
                     }
                 }
                 ControlKind.LOOK -> Unit   // sent as deltas, not as a stick
@@ -198,7 +205,7 @@ class TouchOverlayView @JvmOverloads constructor(
         NativeBridge.nativeTouchState(
             buttons, leftTrigger, rightTrigger,
             leftX.coerceIn(-1f, 1f), leftY.coerceIn(-1f, 1f),
-            0f, 0f,
+            rightX.coerceIn(-1f, 1f), rightY.coerceIn(-1f, 1f),
         )
     }
 
@@ -772,7 +779,15 @@ class TouchOverlayView @JvmOverloads constructor(
         stroke.strokeWidth = max(1f, 1.5f * density)
         canvas.drawCircle(knobX, knobY, dishR, stroke)
 
-        // 4. The 4 Signature Xbox Rubber Grip Dimples/Dots (Top, Bottom, Left, Right)
+        // 4. Center label when idle ("LS" or "RS")
+        if (!isDeflected) {
+            subText.textSize = dishR * 0.45f
+            subText.color = Color.argb((alpha * fadeFactor * 130).toInt().coerceIn(0, 255), 148, 163, 184)
+            val stickLabel = if (element.value == 1 || element.id.contains("right")) "RS" else "LS"
+            canvas.drawText(stickLabel, knobX, knobY - (subText.descent() + subText.ascent()) * 0.5f, subText)
+        }
+
+        // 5. The 4 Signature Xbox Rubber Grip Dimples/Dots (Top, Bottom, Left, Right)
         val dotOffset = knobR * 0.44f
         val dotRadius = max(2f, 2.8f * density)
 

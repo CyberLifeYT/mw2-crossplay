@@ -333,9 +333,16 @@ namespace vk::renderer::detail
 
         VkPipeline built = VK_NULL_HANDLE;
         VkResult res = VK_SUCCESS;
+        void* pCache = vk::pipeline::Cache();
+        if (pCache)
         {
             std::lock_guard cacheLock(vk::pipeline::CacheMutex());
-            res = vkCreateGraphicsPipelines(g.device, static_cast<VkPipelineCache>(vk::pipeline::Cache()),
+            res = vkCreateGraphicsPipelines(g.device, static_cast<VkPipelineCache>(pCache),
+                                            1, &info, nullptr, &built);
+        }
+        else
+        {
+            res = vkCreateGraphicsPipelines(g.device, VK_NULL_HANDLE,
                                             1, &info, nullptr, &built);
         }
         const uint64_t tookMs = uint64_t(std::chrono::duration_cast<std::chrono::milliseconds>(

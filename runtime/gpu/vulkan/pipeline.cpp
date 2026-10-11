@@ -531,9 +531,10 @@ namespace
     void CreateCache()
     {
         std::lock_guard lock(vk::pipeline::CacheMutex());
-        if (env::Flag("MW2_NO_PIPELINE_CACHE"))
+        if (g.deviceProperties.vendorID == 0x13B5 || env::Flag("MW2_NO_PIPELINE_CACHE"))
         {
-            LOGI("pipeline: persistent VkPipelineCache bypassed (MW2_NO_PIPELINE_CACHE)");
+            LOGI("pipeline: persistent VkPipelineCache bypassed (ARM Mali GPU %04X or MW2_NO_PIPELINE_CACHE)",
+                 g.deviceProperties.vendorID);
             return;
         }
 
@@ -745,6 +746,7 @@ void*    vk::pipeline::SetLayout(uint32_t set) { return set < 3 ? g.sets[set] : 
 void*    vk::pipeline::Layout() { return g.layout; }
 void*    vk::pipeline::Cache()
 {
+    if (g.deviceProperties.vendorID == 0x13B5) return nullptr; // ARM Mali
     static const bool noCache = env::Flag("MW2_NO_PIPELINE_CACHE");
     if (noCache) return nullptr;
     return g.cache;
