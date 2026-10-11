@@ -476,22 +476,28 @@ namespace vk::renderer::detail
                         continue;
                 }
 
-                const Shader* vertex = nullptr;
-                const Shader* pixel = nullptr;
+                Shader vertexCopy{};
+                Shader pixelCopy{};
+                bool foundShaders = false;
                 {
                     std::lock_guard lock(g_shadersMutex);
                     auto vIt = g.shaders.find(key.vertexShader);
                     auto pIt = g.shaders.find(key.pixelShader);
-                    if (vIt != g.shaders.end() && vIt->second.module) vertex = &vIt->second;
-                    if (pIt != g.shaders.end() && pIt->second.module) pixel = &pIt->second;
+                    if (vIt != g.shaders.end() && vIt->second.module &&
+                        pIt != g.shaders.end() && pIt->second.module)
+                    {
+                        vertexCopy = vIt->second;
+                        pixelCopy = pIt->second;
+                        foundShaders = true;
+                    }
                 }
 
-                if (!vertex || !pixel)
+                if (!foundShaders)
                     continue;
 
                 const auto start = std::chrono::steady_clock::now();
                 bool made = false;
-                VkPipeline built = EnsurePipeline(key, *vertex, *pixel, &made);
+                VkPipeline built = EnsurePipeline(key, vertexCopy, pixelCopy, &made);
                 const uint32_t tookMs = uint32_t(std::chrono::duration_cast<std::chrono::milliseconds>(
                     std::chrono::steady_clock::now() - start).count());
 
@@ -511,8 +517,9 @@ namespace vk::renderer::detail
                     }
                 }
 
-                // Yield to prevent thermal spikes
-                std::this_thread::sleep_for(std::chrono::milliseconds(20));
+                // Yield to prevent thermal spikes and GPU driver queue starvation
+                const int sleepMs = warmup::g_cutsceneActive.load(std::memory_order_relaxed) ? 10 : 35;
+                std::this_thread::sleep_for(std::chrono::milliseconds(sleepMs));
             }
             LOGI("warmup: scheduler worker thread exiting");
         }
