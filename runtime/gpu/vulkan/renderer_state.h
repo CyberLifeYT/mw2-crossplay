@@ -689,6 +689,7 @@ namespace vk::renderer::detail
     void TakeOptimisedPipelines();
     // Every finished frame, so the compiling waits while the world is drawn.
     void NoteFrame(bool world);
+    extern std::mutex g_pipelinesMutex;
     void StartPreparing();
     void StopPreparing();
     void ReportPreparing();

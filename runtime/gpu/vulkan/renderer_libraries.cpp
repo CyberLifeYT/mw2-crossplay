@@ -383,6 +383,7 @@ namespace vk::renderer::detail
             finished.swap(o.finished);
             o.anyFinished.store(false, std::memory_order_relaxed);
         }
+        std::lock_guard lock(g_pipelinesMutex);
         for (auto& [key, optimised] : finished)
         {
             auto found = g.pipelines.find(key);

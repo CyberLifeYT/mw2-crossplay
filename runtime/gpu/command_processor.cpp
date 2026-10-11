@@ -853,8 +853,8 @@ namespace
                 s.lostStep = true;
                 static uint32_t shown = 0;
                 if (shown++ < 8)
-                    LOGW("pm4: a packet at %08X (header %08X) runs past the end of its buffer;"
-                         " the rest of the buffer is not read", s.AddressOf(s.index - 1), header);
+                    LOGW("pm4: packet at %08X (header %08X, type %u, payload %u words, remaining %u words, depth %d) runs past buffer; skipping remainder",
+                         s.AddressOf(s.index - 1), header, type, payload, s.remaining, depth);
                 return;
             }
             g.typeCount[type]++;

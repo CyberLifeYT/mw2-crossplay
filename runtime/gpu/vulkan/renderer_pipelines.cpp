@@ -23,10 +23,10 @@
 
 namespace vk::renderer::detail
 {
+    std::mutex g_pipelinesMutex;
     namespace
     {
         std::mutex g_shadersMutex;
-        std::mutex g_pipelinesMutex;
     }
 
     // A shader the title has not drawn with before here: taken from the ones
@@ -405,7 +405,8 @@ namespace vk::renderer::detail
 
         {
             std::lock_guard lock(g_pipelinesMutex);
-            g.pipelines[key] = built;   // a failure is remembered, so it fails once
+            if (built)
+                g.pipelines[key] = built;
         }
         return built;
     }
@@ -615,22 +616,49 @@ namespace vk::renderer::detail
         std::FILE* file = std::fopen(tmpPath.c_str(), "wb");
         if (!file) return;
 
+        bool writeOk = true;
         const uint32_t header[4] = { kCacheMagic, kCacheVersion,
                                      uint32_t(g.shaders.size()), uint32_t(g.recorded.size()) };
-        std::fwrite(header, sizeof header, 1, file);
+        if (std::fwrite(header, sizeof header, 1, file) != 1) writeOk = false;
         for (const auto& [hash, shader] : g.shaders)
         {
+            if (!writeOk) break;
             const uint32_t entry[2] = { uint32_t(shader.type == shader::Type::Pixel),
                                         uint32_t(shader.code.size()) };
-            std::fwrite(&hash, sizeof hash, 1, file);
-            std::fwrite(entry, sizeof entry, 1, file);
-            std::fwrite(shader.code.data(), 4, shader.code.size(), file);
+            if (std::fwrite(&hash, sizeof hash, 1, file) != 1 ||
+                std::fwrite(entry, sizeof entry, 1, file) != 1 ||
+                (shader.code.size() && std::fwrite(shader.code.data(), 4, shader.code.size(), file) != shader.code.size()))
+            {
+                writeOk = false;
+                break;
+            }
         }
-        std::fwrite(g.recorded.data(), sizeof(Recorded), g.recorded.size(), file);
-        std::fclose(file);
-        std::rename(tmpPath.c_str(), path);
-        LOGI("renderer: wrote %zu shaders and %zu pipelines to %s",
-             g.shaders.size(), g.recorded.size(), path);
+        if (writeOk && !g.recorded.empty())
+        {
+            if (std::fwrite(g.recorded.data(), sizeof(Recorded), g.recorded.size(), file) != g.recorded.size())
+                writeOk = false;
+        }
+
+        if (std::fclose(file) != 0) writeOk = false;
+
+        if (writeOk)
+        {
+            if (std::rename(tmpPath.c_str(), path) == 0)
+            {
+                LOGI("renderer: wrote %zu shaders and %zu pipelines to %s",
+                     g.shaders.size(), g.recorded.size(), path);
+            }
+            else
+            {
+                LOGW("renderer: failed to commit shader cache to %s", path);
+                std::remove(tmpPath.c_str());
+            }
+        }
+        else
+        {
+            LOGW("renderer: failed writing shader cache, removing temporary file");
+            std::remove(tmpPath.c_str());
+        }
 
         // Commit driver's persistent pipeline cache alongside recipes
         vk::pipeline::SaveCache();
@@ -670,16 +698,38 @@ namespace vk::renderer::detail
         const auto start = std::chrono::steady_clock::now();
         for (uint32_t i = 0; i < header[2]; i++)
         {
+            const long curPos = std::ftell(file);
+            if (curPos < 0 || curPos + (long)(sizeof(uint64_t) + sizeof(uint32_t) * 2) > fileSize)
+            {
+                std::fclose(file);
+                LOGW("renderer: %s truncated while reading shader header %u", path, i);
+                return;
+            }
             uint64_t hash = 0;
             uint32_t entry[2]{};
             if (std::fread(&hash, sizeof hash, 1, file) != 1 ||
                 std::fread(entry, sizeof entry, 1, file) != 1) { std::fclose(file); return; }
             if (entry[1] > 256 * 1024) { std::fclose(file); return; } // Max 1 MB shader
+            const long dataBytes = (long)entry[1] * 4;
+            if (std::ftell(file) + dataBytes > fileSize)
+            {
+                std::fclose(file);
+                LOGW("renderer: %s truncated payload for shader %u", path, i);
+                return;
+            }
             std::vector<uint32_t> code(entry[1]);
             if (entry[1] && std::fread(code.data(), 4, code.size(), file) != code.size())
             { std::fclose(file); return; }
             ShaderFor(entry[0] ? shader::Type::Pixel : shader::Type::Vertex,
                       hash, code.data(), code.size());
+        }
+
+        const long recBytes = (long)header[3] * (long)sizeof(Recorded);
+        if (std::ftell(file) + recBytes > fileSize)
+        {
+            std::fclose(file);
+            LOGW("renderer: %s truncated recorded pipeline records", path);
+            return;
         }
 
         std::vector<Recorded> wanted(header[3]);

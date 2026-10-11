@@ -277,7 +277,8 @@ struct PPCFPSCRRegister
 
     inline void setcsr(uint32_t csr) noexcept
     {
-        __asm__ __volatile__("msr fpcr, %0" : : "r"(csr));
+        const uint64_t val = csr;
+        __asm__ __volatile__("msr fpcr, %0" : : "r"(val));
     }
 #else
 #   error "Missing implementation for FPSCR."
