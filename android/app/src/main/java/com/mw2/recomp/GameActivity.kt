@@ -691,14 +691,10 @@ class GameActivity : AppCompatActivity(), NativeListener {
         )
         // Both caches live in the app's own folder and make the second start
         // of a level far quicker than the first.
-        val extDir = getExternalFilesDir(null)
-        val shaderCacheFile = if (extDir != null) File(extDir, "shader_cache.bin") else File(filesDir, "shader_cache.bin")
+        val shaderCacheFile = File(filesDir, "shader_cache.bin")
         if (!shaderCacheFile.exists()) {
-            val internalCache = File(filesDir, "shader_cache.bin")
             val legacyShaders = File(filesDir, "shaders")
-            if (internalCache.exists() && internalCache.length() > 0) {
-                internalCache.copyTo(shaderCacheFile, overwrite = true)
-            } else if (legacyShaders.exists() && legacyShaders.length() > 0) {
+            if (legacyShaders.exists() && legacyShaders.length() > 0) {
                 legacyShaders.copyTo(shaderCacheFile, overwrite = true)
             } else {
                 try {
@@ -707,7 +703,7 @@ class GameActivity : AppCompatActivity(), NativeListener {
                             input.copyTo(output)
                         }
                     }
-                    android.util.Log.i("MW2", "Unpacked bundled shader_cache.bin from assets to ${shaderCacheFile.absolutePath}")
+                    android.util.Log.i("MW2", "Unpacked bundled shader_cache.bin from assets")
                 } catch (_: Exception) {}
             }
         }

@@ -295,10 +295,6 @@ namespace vk::renderer::detail
         const PipelineState state(key);
         VkGraphicsPipelineCreateInfo info{ VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO };
         info.pNext = vk::pipeline::LegacyMode() ? nullptr : &state.rendering;
-        if (vk::pipeline::IsMali() || vk::pipeline::LegacyMode() || env::Flag("MW2_FAST_COMPILE"))
-        {
-            info.flags |= VK_PIPELINE_CREATE_DISABLE_OPTIMIZATION_BIT;
-        }
 
         gpu::detail::SetCurrentDrawStage("Draw_EnsurePipeline_GetRenderPass");
         VkRenderPass renderPass = vk::pipeline::LegacyMode()

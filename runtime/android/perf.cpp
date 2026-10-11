@@ -183,20 +183,12 @@ void android::perf::ApplyMemoryDefaults()
     // Both caches live in the app's private folder. The pipeline cache is the
     // driver's; the shader cache is the list of pipelines this device has
     // needed, built at the next start-up so they are not compiled mid-fight.
-    if (!paths.external.empty())
-    {
-        const std::string shaders = paths.external + "/shader_cache.bin";
-        setenv("MW2_SHADER_CACHE", shaders.c_str(), 0);
-    }
-    else if (!paths.files.empty())
-    {
-        const std::string shaders = paths.files + "/shader_cache.bin";
-        setenv("MW2_SHADER_CACHE", shaders.c_str(), 0);
-    }
     if (!paths.files.empty())
     {
         const std::string pipeline = paths.files + "/pipeline.cache";
+        const std::string shaders = paths.files + "/shader_cache.bin";
         setenv("MW2_PIPELINE_CACHE", pipeline.c_str(), 0);
+        setenv("MW2_SHADER_CACHE", shaders.c_str(), 0);
     }
 
     LOGI("perf: %u MB of memory, %u MB free; textures %u MB, arena %u MB", totalMB,
