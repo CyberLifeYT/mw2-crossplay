@@ -238,8 +238,12 @@ void vk::renderer::Draw(const gpu::RegisterFile& r, const DrawCall& call)
     if constexpr (diag::kOn)
         g.drawRecord = BeginDrawRecord(r, call.vertexHash, call.pixelHash, call.primitive,
                                        call.indexCount, call.indexed ? call.indexAddress : 0);
-    struct CloseRecord { ~CloseRecord() { g.drawRecord = nullptr; } } closeRecord;
-    // Everything up to the indices: the shaders, the scissor, the render target
+    struct CloseRecord {
+        ~CloseRecord() {
+            g.drawRecord = nullptr;
+            gpu::detail::SetCurrentDrawStage("idle");
+        }
+    } closeRecord;
     // and the pass and framebuffer that go with it.
     const auto setupFrom = Timing() ? std::chrono::steady_clock::now()
                                     : std::chrono::steady_clock::time_point{};

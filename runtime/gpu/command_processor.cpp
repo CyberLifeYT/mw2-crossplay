@@ -979,6 +979,9 @@ namespace
                                    : ((header >> 16) & 0x3FFF) + 1;
             const uint32_t opcode = (type == 3) ? ((header >> 8) & 0x7F) : 0xFF;
             RecordPacket(packetAddr, header, type, opcode, payload, s.remaining, depth);
+            g_currentOpcode.store((type << 8) | (type == 3 ? opcode : 0), std::memory_order_relaxed);
+            g_currentOpcodeName.store(type == 3 ? OpcodeName(opcode) : (type == 0 ? "TYPE_0" : type == 1 ? "TYPE_1" : "TYPE_2"), std::memory_order_relaxed);
+            g_currentDepth.store(depth, std::memory_order_relaxed);
 
             if (payload > s.remaining || (type == 3 && !OpcodeName(opcode)))
             {
@@ -987,6 +990,8 @@ namespace
                 {
                     LOGW("pm4: packet at %08X (header %08X, type %u, payload %u words, remaining %u words, depth %d) invalid; seeking next valid packet",
                          packetAddr, header, type, payload, s.remaining, depth);
+                    DumpPacketHistory(16);
+                    DumpMemoryWindow(packetAddr);
                 }
 
                 bool recovered = false;
@@ -1015,6 +1020,28 @@ namespace
                 if (!recovered)
                 {
                     s.lostStep = true;
+                    // Scan remaining buffer words to salvage any trailing PM4_EVENT_WRITE_SHD packets
+                    // so guest D3D9 arena progress fences are never dropped, avoiding producer deadlocks.
+                    while (s.remaining >= 4)
+                    {
+                        const uint32_t w = s.Next();
+                        if ((w >> 30) == 3 && ((w >> 8) & 0x7F) == PM4_EVENT_WRITE_SHD)
+                        {
+                            const uint32_t count = ((w >> 16) & 0x3FFF) + 1;
+                            if (count >= 3 && s.remaining >= 3)
+                            {
+                                const uint32_t initiator = s.Next();
+                                const uint32_t address   = s.Next();
+                                const uint32_t value     = s.Next();
+                                vk::renderer::BeforeCompletion();
+                                if (!ArenaProgress(address, value))
+                                    WritePhysical(address, (initiator >> 31) ? uint32_t(PPC_QueryTimebase()) : value);
+                                LOGI("pm4: salvaged trailing EVENT_WRITE_SHD at %08X (addr %08X, val %08X)",
+                                     s.AddressOf(s.index - 4), address, value);
+                                if (count > 3) s.Skip(count - 3);
+                            }
+                        }
+                    }
                     return;
                 }
                 continue;
