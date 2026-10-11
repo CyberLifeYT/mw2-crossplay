@@ -206,6 +206,21 @@ namespace
         return layers && std::strstr(layers, "validation");
     }
 
+    // Whether the installed loader/driver offers an instance-level extension
+    // (VK_KHR_get_physical_device_properties2, VK_KHR_maintenance1 ...).
+    bool InstanceHasExtension(const char* name)
+    {
+        uint32_t count = 0;
+        if (vkEnumerateInstanceExtensionProperties(name, &count, nullptr) != VK_SUCCESS || !count)
+            return false;
+        std::vector<VkExtensionProperties> offered(count);
+        if (vkEnumerateInstanceExtensionProperties(name, &count, offered.data()) != VK_SUCCESS)
+            return false;
+        for (const auto& e : offered)
+            if (std::strcmp(e.extensionName, name) == 0) return true;
+        return false;
+    }
+
     bool CreateInstance()
     {
         std::vector<const char*> extensions;
@@ -222,11 +237,15 @@ namespace
 
         VkApplicationInfo app{ VK_STRUCTURE_TYPE_APPLICATION_INFO };
         app.pApplicationName = "mw2recomp";
+        // 1.0 is the floor: negative viewport heights (VK_KHR_maintenance1
+        // before that) are an extension too, and 1.0 is the version the APK
+        // advertises on its Play-store device filter. Everything newer is
+        // optional and asked for by extension or checked at device time.
         // The highest the loader will admit to, capped at 1.3. It matters:
         // dynamic rendering and extended dynamic state are core there, and
         // a driver that has them in core rather than as extensions can only
         // be asked for them by an application that says it targets 1.3.
-        app.apiVersion = VK_API_VERSION_1_2;
+        app.apiVersion = VK_API_VERSION_1_0;
 #if defined(MW2_VULKAN_DYNAMIC)
         if (vkEnumerateInstanceVersion)
 #endif
@@ -237,6 +256,22 @@ namespace
             {
                 app.apiVersion = VK_API_VERSION_1_3;
             }
+        }
+
+        // The loader would name these itself on Android; everywhere else they
+        // come from SDL's list. A 1.0 instance has to name what 1.1 and 1.2
+        // make core, because the runtime asks for maintenance1's negative
+        // viewport and for `vkGetPhysicalDeviceProperties2` / `...Features2`
+        // (properties2's pNext chain, the depth resolve and driver
+        // properties read here and in pipeline.cpp) and those are pre-1.1
+        // extensions behind both.
+        if (app.apiVersion < VK_API_VERSION_1_1)
+        {
+            if (vkGetInstanceProcAddr(VK_NULL_HANDLE, "vkEnumerateInstanceExtensionProperties") &&
+                InstanceHasExtension(VK_KHR_GET_PHYSICAL_DEVICE_PROPERTIES_2_EXTENSION_NAME))
+                extensions.push_back(VK_KHR_GET_PHYSICAL_DEVICE_PROPERTIES_2_EXTENSION_NAME);
+            if (InstanceHasExtension(VK_KHR_MAINTENANCE1_EXTENSION_NAME))
+                extensions.push_back(VK_KHR_MAINTENANCE1_EXTENSION_NAME);
         }
 
         VkDebugUtilsMessengerCreateInfoEXT messenger{

@@ -198,6 +198,27 @@ bool vk::pipeline::CreateDevice(void* physicalDevice, uint32_t family,
     std::vector<const char*> extensions(extraExtensions, extraExtensions + extraCount);
     if (DeviceHasExtension(physical, VK_KHR_IMAGE_FORMAT_LIST_EXTENSION_NAME))
         extensions.push_back(VK_KHR_IMAGE_FORMAT_LIST_EXTENSION_NAME);
+    // MSAA depth surfaces are read back through a render pass resolve. That is
+    // core in Vulkan 1.2 but an extension before it, so a 1.1-or-1.0 device
+    // has to be asked for it by name -- its presence is what renderer.cpp
+    // gates multisampling on.
+    {
+        VkPhysicalDeviceProperties check{};
+        vkGetPhysicalDeviceProperties(physical, &check);
+        if (check.apiVersion < VK_API_VERSION_1_2 &&
+            DeviceHasExtension(physical, VK_KHR_DEPTH_STENCIL_RESOLVE_EXTENSION_NAME))
+            extensions.push_back(VK_KHR_DEPTH_STENCIL_RESOLVE_EXTENSION_NAME);
+        // The depth resolve's own query goes through GetPhysicalDevice*
+        // Properties2, and the 1.1 promoted Maintenance1 is where negative
+        // viewport heights (the renderer's flipped clip space) live.
+        if (check.apiVersion < VK_API_VERSION_1_1)
+        {
+            if (DeviceHasExtension(physical, VK_KHR_GET_PHYSICAL_DEVICE_PROPERTIES_2_EXTENSION_NAME))
+                extensions.push_back(VK_KHR_GET_PHYSICAL_DEVICE_PROPERTIES_2_EXTENSION_NAME);
+            if (DeviceHasExtension(physical, VK_KHR_MAINTENANCE1_EXTENSION_NAME))
+                extensions.push_back(VK_KHR_MAINTENANCE1_EXTENSION_NAME);
+        }
+    }
 
     // Direct3D 9 filters each cube face on its own, clamped at its edges; a
     // Vulkan cube blends across them unless told not to. Xenia asks for the
@@ -359,14 +380,15 @@ namespace
 
         VkApplicationInfo app{ VK_STRUCTURE_TYPE_APPLICATION_INFO };
         app.pApplicationName = "mw2recomp";
-        // 1.1 for negative viewport heights, which is how the renderer expresses the
-        // console's +Y-up clip space; 1.2 for the render pass depth resolve the
-        // multisampled surfaces need.
-        // The highest the loader will admit to, capped at 1.3. It matters:
-        // dynamic rendering and extended dynamic state are core there, and
-        // a driver that has them in core rather than as extensions can only
-        // be asked for them by an application that says it targets 1.3.
-        app.apiVersion = VK_API_VERSION_1_2;
+        // 1.0 is the floor: negative viewport heights (VK_KHR_maintenance1
+        // before that) and still-valid depth resolves (VK_KHR_get_*2 and
+        // VK_KHR_depth_stencil_resolve) are all extensions, and the top of the
+        // device's version is checked in CreateDevice regardless. The highest
+        // the loader will admit to, capped at 1.3: dynamic rendering and
+        // extended dynamic state are core there, and a driver that has them
+        // in core rather than as extensions can only be asked for them by an
+        // application that says it targets 1.3.
+        app.apiVersion = VK_API_VERSION_1_0;
 #if defined(MW2_VULKAN_DYNAMIC)
         if (vkEnumerateInstanceVersion)
 #endif
@@ -379,8 +401,35 @@ namespace
             }
         }
 
+        // A 1.0 instance has to name what 1.1 and 1.2 make core, because the
+        // runtime asks for negative viewport heights (maintenance1) and for
+        // the pNext-chain properties2 the depth resolve read goes through.
+        std::vector<const char*> instanceExtensions;
+        if (app.apiVersion < VK_API_VERSION_1_1)
+        {
+            uint32_t offered = 0;
+            if (vkEnumerateInstanceExtensionProperties(nullptr, &offered, nullptr) == VK_SUCCESS && offered)
+            {
+                std::vector<VkExtensionProperties> list(offered);
+                if (vkEnumerateInstanceExtensionProperties(nullptr, &offered, list.data()) == VK_SUCCESS)
+                {
+                    const auto have = [&list](const char* name) {
+                        for (const auto& e : list)
+                            if (std::strcmp(e.extensionName, name) == 0) return true;
+                        return false;
+                    };
+                    if (have(VK_KHR_GET_PHYSICAL_DEVICE_PROPERTIES_2_EXTENSION_NAME))
+                        instanceExtensions.push_back(VK_KHR_GET_PHYSICAL_DEVICE_PROPERTIES_2_EXTENSION_NAME);
+                    if (have(VK_KHR_MAINTENANCE1_EXTENSION_NAME))
+                        instanceExtensions.push_back(VK_KHR_MAINTENANCE1_EXTENSION_NAME);
+                }
+            }
+        }
+
         VkInstanceCreateInfo info{ VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO };
         info.pApplicationInfo = &app;
+        info.enabledExtensionCount = uint32_t(instanceExtensions.size());
+        info.ppEnabledExtensionNames = instanceExtensions.data();
         VkResult r = vkCreateInstance(&info, nullptr, &g.instance);
         if (r != VK_SUCCESS) { LOGW("pipeline: no Vulkan instance (%s)", Explain(r)); return false; }
 #if defined(MW2_VULKAN_DYNAMIC)
