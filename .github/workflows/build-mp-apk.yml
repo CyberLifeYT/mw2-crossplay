@@ -79,6 +79,7 @@ jobs:
           # Plain URL, NO credentials in it (they break URL parsing and leak).
           # The token travels as an Authorization header instead.
           ARCHIVE_URL: ${{ secrets.GAME_ARCHIVE_URL }}
+          MW2_ASSETS_TOKEN: ${{ secrets.MW2_ASSETS_TOKEN }}
           HTTP_AUTHORIZATION: Bearer ${{ secrets.MW2_ASSETS_TOKEN }}
         run: |
           set -euo pipefail
