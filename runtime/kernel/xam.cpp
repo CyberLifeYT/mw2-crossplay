@@ -547,6 +547,30 @@ namespace
             g_sessions[object] = s;
         }
         if (info) kernel::NoteSessionId(info->sessionId);
+        // What the guest will knock on: the session's kind (Live sessions
+        // carry 0x80 in the id's top bits, system link does not) and the
+        // host's address out of its XNADDR. When a join loops on the title's
+        // "attempt #N", this line against the host's "lan as ..." line says
+        // whether the guest even has the right kind and door.
+        if (!host && info)
+        {
+            const uint8_t* xaddr = info->hostAddress;
+            if (std::memcmp(xaddr + 16, "MW2O", 4) != 0)
+            {
+                LOGI("online: joining a %s session, host address untagged (not this build's)",
+                     (info->sessionId[0] & 0x80) ? "Live" : "system-link");
+            }
+            else
+            {
+                uint64_t peer = 0;
+                for (int i = 0; i < 8; i++) peer = (peer << 8) | xaddr[20 + i];
+                const uint32_t ip = uint32_t(peer >> 16);
+                LOGI("online: joining a %s session, host %u.%u.%u.%u:%u",
+                     (info->sessionId[0] & 0x80) ? "Live" : "system-link",
+                     (ip >> 24) & 255, (ip >> 16) & 255, (ip >> 8) & 255, ip & 255,
+                     unsigned(peer & 0xFFFF));
+            }
+        }
         if (host && info && nonce && !live) AdvertiseHosted(s);
         PublishJoinable();
         return {};
@@ -885,6 +909,8 @@ void kernel::MovePlayerData(uint64_t from, uint64_t to)
 
 void kernel::AcceptInvite(uint64_t inviterAccount, const uint8_t* session60, bool fromInvite)
 {
+    LOGI("online: accepting %s from %016llX for session %02X..",
+         fromInvite ? "an invitation" : "a join", (unsigned long long)inviterAccount, session60[0]);
     {
         std::lock_guard g(g_inviteLock);
         uint8_t* p = g_invite.bytes;

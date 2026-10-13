@@ -4,6 +4,8 @@
 // it starts (runtime/settings.cpp), however it is started, so a change is
 // for the next start. The file can hold any of the game's switches; the
 // launcher changes its own and keeps the rest.
+#include <string>
+
 namespace settings
 {
     void Load();
@@ -26,6 +28,20 @@ namespace settings
     constexpr int kConsoleFov = 65, kWidestFov = 120, kFovStep = 5;
     int Fov();
     void SetFov(int fov);
+
+    // MW2_LAN_ACCEPT: 1 joins LAN lobby invitations without asking.
+    bool LanAccept();
+    void SetLanAccept(bool accept);
+
+    // MW2_NAME: the name other network players see (15 characters). Empty
+    // means the profile's name.
+    std::string LanName();
+    void SetLanName(const std::string& name);
+
+    // MW2_LAN_JOIN: joins that player's lobby as soon as it is seen.
+    // Empty means off; the server browser and invitations still work.
+    std::string LanJoin();
+    void SetLanJoin(const std::string& name);
 
     // MW2_LAUNCHER_SOUNDS: 0 keeps the launcher's menus silent. Written by hand.
     bool Sounds();

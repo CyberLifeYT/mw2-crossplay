@@ -195,6 +195,8 @@ namespace
         CheckUpdate, InstallUpdate,
         // The graphics screen, and the next of what each of its entries sets.
         Graphics, Resolution, FpsLimit, Fov,
+        // The network screen: who this machine is online and what it joins.
+        Network, LanAccept, NetName, NetJoin,
         // The bug report screen: a run of either game with its log kept.
         Report, ReportCampaign, ReportMultiplayer,
         // The question a start asks when a recorded run was never reported.
@@ -233,6 +235,8 @@ namespace
         size_t player = 0;
         bool renaming = false;          // the keyboard types a profile's new name
         std::string newName;
+        bool editingNet = false;        // the keyboard types a network name instead
+        int netField = 0;               // 0 player name, 1 auto-join player
         profile::Campaign campaign;
         update::Release release;        // the newer version a look found, if `newer`
         bool newer = false;
@@ -240,6 +244,7 @@ namespace
         bool gameRunning = false;       // looked up once a second while the profile screen shows
         bool reportScreen = false;
         bool graphicsScreen = false;
+        bool networkScreen = false;
         // What FPS LIMIT goes through: the console's 60, two rates screens
         // commonly have, and none. A screen at another rate has its own in
         // place of the common one nearest to it, and until the player chooses,
@@ -393,12 +398,14 @@ namespace
             case Action::Profile:
             case Action::Report:
             case Action::Graphics:
+            case Action::Network:
             case Action::Back:
                 gameRunning = action == Action::Profile && GameRunning();
                 gameChecked = std::chrono::steady_clock::now();
                 profileScreen = action == Action::Profile;
                 reportScreen = action == Action::Report;
                 graphicsScreen = action == Action::Graphics;
+                networkScreen = action == Action::Network;
                 message.clear();
                 messageIsError = false;
                 focusPlaced = false;
@@ -434,6 +441,18 @@ namespace
                 // Choosing goes one step wider, and round to the console's.
                 settings::SetFov(settings::Fov() >= settings::kWidestFov ? settings::kConsoleFov : settings::Fov() + settings::kFovStep);
                 break;
+            case Action::LanAccept:
+                settings::SetLanAccept(!settings::LanAccept());
+                break;
+            case Action::NetName:
+            case Action::NetJoin:
+                editingNet = true;
+                netField = action == Action::NetJoin ? 1 : 0;
+                newName = netField ? settings::LanJoin() : settings::LanName();
+                message.clear();
+                messageIsError = false;
+                SDL_StartTextInput(window);
+                break;
             case Action::Rename:
                 renaming = true;
                 newName = players[player].name;
@@ -453,9 +472,34 @@ namespace
             }
         }
 
-        // The keyboard while a profile is renamed.
+        // The keyboard while a name is typed: a profile's, or a network
+        // setting's (netField 0 player name, 1 auto-join player).
         void Type(const SDL_Event& event)
         {
+            if (editingNet)
+            {
+                if (event.type == SDL_EVENT_TEXT_INPUT)
+                {
+                    for (const char* c = event.text.text; *c; c++)
+                        if (newName.size() < 15 && (std::isalnum(static_cast<unsigned char>(*c)) || *c == ' ')) newName += *c;
+                    return;
+                }
+                if (event.type != SDL_EVENT_KEY_DOWN) return;
+                if (event.key.key == SDLK_BACKSPACE && !newName.empty()) newName.pop_back();
+                const bool keep = event.key.key == SDLK_RETURN || event.key.key == SDLK_KP_ENTER;
+                if (!keep && event.key.key != SDLK_ESCAPE) return;
+                editingNet = false;
+                SDL_StopTextInput(window);
+                if (!keep) return;
+                if (netField) settings::SetLanJoin(newName);
+                else settings::SetLanName(newName);
+                message = netField ? (newName.empty() ? "No player is joined automatically."
+                                                      : "Joining " + newName + " when seen.")
+                                   : (newName.empty() ? "Other players see the profile's name."
+                                                      : "Other players see " + newName + ".");
+                messageIsError = false;
+                return;
+            }
             if (event.type == SDL_EVENT_TEXT_INPUT)
             {
                 for (const char* c = event.text.text; *c; c++)
@@ -698,6 +742,46 @@ namespace
             return entries;
         }
 
+        // The network screen: who this machine is to other players, and what
+        // it joins without asking. Kept in .env, for the next start.
+        std::vector<Entry> NetworkEntries() const
+        {
+            std::vector<Entry> entries;
+            auto add = [&](Action action, std::string label, const char* heading, std::string text) {
+                Entry entry;
+                entry.shown.label = std::move(label);
+                entry.action = action;
+                entry.heading = heading;
+                entry.text = std::move(text);
+                entries.push_back(std::move(entry));
+                return &entries.back();
+            };
+            const std::string name = settings::LanName();
+            const bool typingName = editingNet && netField == 0;
+            add(Action::NetName, std::string("PLAYER NAME ") + (name.empty() ? "PROFILE" : name), "PLAYER NAME",
+                typingName ? "New name: " + newName + "_\n\nENTER keeps it, ESC leaves it as it was."
+                           : std::string("The name other players on the network see: now ") +
+                             (name.empty() ? "the profile's name." : name + ".") +
+                             "\n\nType one with the keyboard (15 characters at most). "
+                             "Without one, others see the profile's name.");
+            const std::string join = settings::LanJoin();
+            const bool typingJoin = editingNet && netField == 1;
+            add(Action::NetJoin, std::string("JOIN PLAYER ") + (join.empty() ? "OFF" : join), "JOIN PLAYER",
+                typingJoin ? "Player to join: " + newName + "_\n\nENTER keeps it, ESC leaves it as it was."
+                           : std::string("Joins that player's lobby as soon as it is seen") +
+                             (join.empty() ? ", turned off." : ": " + join + ".") +
+                             "\n\nType the name exactly as their machine shows it. "
+                             "The server browser and invitations work either way.");
+            const bool accept = settings::LanAccept();
+            add(Action::LanAccept, std::string("AUTO-ACCEPT INVITES ") + (accept ? "ON" : "OFF"), "AUTO-ACCEPT INVITES",
+                std::string("When another player on the network invites this machine to their lobby, ") +
+                (accept ? "it joins without asking." : "it only logs the invitation.") +
+                "\n\nChoose to switch it " + (accept ? "off." : "on.") +
+                " Both sides need to hear each other first: same network, firewall open.");
+            add(Action::Back, "BACK", "", "")->shown.ruleAbove = true;
+            return entries;
+        }
+
         // A file the dialog returned, or one dropped on the window.
         void Take(Action forAction, const std::string& path)
         {
@@ -823,6 +907,7 @@ namespace
             if (profileScreen) return ProfileEntries();
             if (reportScreen) return ReportEntries();
             if (graphicsScreen) return GraphicsEntries();
+            if (networkScreen) return NetworkEntries();
             std::vector<Entry> entries;
             auto add = [&](Action action, std::string label, bool enabled, const char* heading, std::string text) {
                 Entry entry;
@@ -880,6 +965,7 @@ namespace
 
             // What the game is played with.
             add(Action::Graphics, "GRAPHICS", true, "GRAPHICS", "The size the game draws at, how many frames a second and how wide its view is.")->shown.ruleAbove = true;
+            add(Action::Network, "NETWORK", true, "NETWORK", "Who this machine is to other players on the network, and what it joins without asking.");
             add(Action::Profile, "PROFILES", true, "PROFILES",
                 "Set the multiplayer rank and prestige, unlock everything, and open the campaign's and Special Ops' missions.");
             add(Action::None, "MAPS", false, "MAPS", "Add and remove custom maps.\n\nNot available yet.")->shown.tag = "SOON";
@@ -956,6 +1042,7 @@ namespace
         {
             SDL_Event event;
             const bool wasRenaming = app.renaming;
+            const bool wasEditingNet = app.editingNet;
             while (SDL_PollEvent(&event))
             {
                 ImGui_ImplSDL3_ProcessEvent(&event);
@@ -966,14 +1053,14 @@ namespace
                 }
                 // A disc image dropped on the window installs from it; while
                 // the update is what is asked for, the file is the update.
-                // A profile's new name, typed.
-                if (app.renaming) app.Type(event);
+                // A new name, typed (a profile's, or a network setting's).
+                if (app.renaming || app.editingNet) app.Type(event);
                 if (event.type == SDL_EVENT_DROP_FILE && event.drop.data)
                     app.Take(app.needsUpdateFile ? Action::ChooseUpdate : Action::Install, event.drop.data);
             }
             app.Poll();
             // The key that ended the typing is not also a choice.
-            const bool typed = wasRenaming && !app.renaming;
+            const bool typed = (wasRenaming && !app.renaming) || (wasEditingNet && !app.editingNet);
 
             ImGui_ImplSDLRenderer3_NewFrame();
             ImGui_ImplSDL3_NewFrame();
@@ -1001,10 +1088,11 @@ namespace
             app.focus = std::clamp(app.focus, 0, count - 1);
             int chosen = pressed({ ImGuiKey_Enter, ImGuiKey_KeypadEnter, ImGuiKey_Space, ImGuiKey_GamepadFaceDown }, false) ? app.focus : -1;
             // While a name is typed the keys are its letters, and the entry stays.
-            if (app.renaming || typed) { app.focus = focusBefore; chosen = -1; }
-            if (app.renaming || typed) {}
+            const bool typing = app.renaming || app.editingNet;
+            if (typing || typed) { app.focus = focusBefore; chosen = -1; }
+            if (typing || typed) {}
             else if (app.job && pressed({ ImGuiKey_Escape, ImGuiKey_GamepadFaceRight }, false)) app.job->progress.cancel = true;
-            else if ((app.profileScreen || app.graphicsScreen || (app.reportScreen && !app.recording)) && pressed({ ImGuiKey_Escape, ImGuiKey_GamepadFaceRight }, false))
+            else if ((app.profileScreen || app.graphicsScreen || app.networkScreen || (app.reportScreen && !app.recording)) && pressed({ ImGuiKey_Escape, ImGuiKey_GamepadFaceRight }, false))
             {
                 sound::Play(sound::Clip::Click);
                 app.Do(Action::Back);
@@ -1035,7 +1123,7 @@ namespace
             }
             else if (app.reportScreen ? !app.message.empty() && !app.recording && (app.messageFocus < 0 || app.focus == app.messageFocus)
                      : app.profileScreen ? !app.message.empty() && app.focus == app.messageFocus
-                                       : !app.message.empty() && (current.action == Action::Install || current.action == Action::ChooseUpdate ||
+                                       : !app.message.empty() && (app.networkScreen || current.action == Action::Install || current.action == Action::ChooseUpdate ||
                                                                   current.action == Action::CheckUpdate || current.action == Action::InstallUpdate || app.messageIsError))
             {
                 frame.text = app.message;
@@ -1049,7 +1137,7 @@ namespace
             if (*update::Current()) frame.corner = std::string(update::Current()) + "   " + frame.corner;
             if (!app.updated.empty()) frame.status = "Updated to " + app.updated + ". " + frame.status;
             frame.hint = app.recording                          ? ""
-                         : app.profileScreen || app.reportScreen || app.graphicsScreen ? "ENTER OR (A) TO CHOOSE, ESC OR (B) TO GO BACK"
+                         : app.profileScreen || app.reportScreen || app.graphicsScreen || app.networkScreen ? "ENTER OR (A) TO CHOOSE, ESC OR (B) TO GO BACK"
                                                                  : "ENTER OR (A) TO CHOOSE";
 
             if (current.action == Action::Fov)

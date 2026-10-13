@@ -70,6 +70,45 @@ void settings::SetFov(int fov)
     Save();
 }
 
+bool settings::LanAccept()
+{
+    const auto kept = g_kept.find("MW2_LAN_ACCEPT");
+    return kept != g_kept.end() && kept->second == "1";
+}
+
+void settings::SetLanAccept(bool accept)
+{
+    if (accept) g_kept["MW2_LAN_ACCEPT"] = "1";
+    else g_kept.erase("MW2_LAN_ACCEPT");
+    Save();
+}
+
+std::string settings::LanName()
+{
+    const auto kept = g_kept.find("MW2_NAME");
+    return kept == g_kept.end() ? std::string() : kept->second.substr(0, 15);
+}
+
+void settings::SetLanName(const std::string& name)
+{
+    if (name.empty()) g_kept.erase("MW2_NAME");
+    else g_kept["MW2_NAME"] = name.substr(0, 15);
+    Save();
+}
+
+std::string settings::LanJoin()
+{
+    const auto kept = g_kept.find("MW2_LAN_JOIN");
+    return kept == g_kept.end() ? std::string() : kept->second;
+}
+
+void settings::SetLanJoin(const std::string& name)
+{
+    if (name.empty()) g_kept.erase("MW2_LAN_JOIN");
+    else g_kept["MW2_LAN_JOIN"] = name;
+    Save();
+}
+
 bool settings::Sounds()
 {
     const auto kept = g_kept.find("MW2_LAUNCHER_SOUNDS");
