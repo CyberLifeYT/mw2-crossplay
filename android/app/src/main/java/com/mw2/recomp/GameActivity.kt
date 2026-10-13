@@ -679,6 +679,12 @@ class GameActivity : AppCompatActivity(), NativeListener {
         // Everything here is one of the runtime's own switches
         // (docs/switches.md); the app just fills them in.
         NativeBridge.nativeSetOption("MW2_FULLSCREEN", "1")
+        // MP refuses to start matches without a link; runtime defaults to up
+        // for MP and down for SP (kernel/net.cpp), but be explicit so a
+        // misbuilt lib still reports a link in the MP app.
+        if (packageName.endsWith(".mp")) {
+            NativeBridge.nativeSetOption("MW2_NET_LINK", "1")
+        }
         NativeBridge.nativeSetOption("MW2_NO_AUDIO", if (prefs.audioEnabled) "" else "1")
         NativeBridge.nativeSetOption("MW2_NO_MSAA", if (prefs.multisampling) "" else "1")
         if (prefs.renderScale in 1..3) {

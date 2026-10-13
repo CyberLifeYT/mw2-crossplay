@@ -141,17 +141,33 @@ class MainActivity : AppCompatActivity() {
                 return
             }
         } else {
-            val candidateIsos = listOf(
-                File("/sdcard/Download/mw2_campaign_lean.iso"),
-                File("/sdcard/Download/mw2.iso"),
-                File("/sdcard/Download/Call of Duty - Modern Warfare 2 (USA, Europe).iso"),
-                File(getExternalFilesDir(null) ?: filesDir, "mw2_campaign_lean.iso"),
-                File(getExternalFilesDir(null) ?: filesDir, "mw2.iso")
-            )
+            // MP needs the FULL disc: mw2_campaign_lean.iso pruned the
+            // multiplayer fastfiles to save 2.7 GB, so it can never satisfy
+            // a multiplayer install. SP accepts either, preferring lean.
+            val isMp = packageName.endsWith(".mp")
+            val candidateIsos = if (isMp) {
+                listOf(
+                    File("/sdcard/Download/mw2.iso"),
+                    File("/sdcard/Download/Call of Duty - Modern Warfare 2 (USA, Europe).iso"),
+                    File(getExternalFilesDir(null) ?: filesDir, "mw2.iso"),
+                    // Lean last: detected but installer will report missing MP zones.
+                    File("/sdcard/Download/mw2_campaign_lean.iso"),
+                )
+            } else {
+                listOf(
+                    File("/sdcard/Download/mw2_campaign_lean.iso"),
+                    File("/sdcard/Download/mw2.iso"),
+                    File("/sdcard/Download/Call of Duty - Modern Warfare 2 (USA, Europe).iso"),
+                    File(getExternalFilesDir(null) ?: filesDir, "mw2_campaign_lean.iso"),
+                    File(getExternalFilesDir(null) ?: filesDir, "mw2.iso")
+                )
+            }
             val downloadFolder = File("/sdcard/Download")
             val anyDownloadIso = if (downloadFolder.exists() && downloadFolder.isDirectory) {
                 downloadFolder.listFiles { f ->
-                    f.isFile && f.name.endsWith(".iso", ignoreCase = true) && f.length() > 500_000_000L
+                    f.isFile && f.name.endsWith(".iso", ignoreCase = true) && f.length() > 500_000_000L &&
+                        // Lean ISO has no MP zones; don't offer it as fallback for MP.
+                        (!isMp || !f.name.contains("lean", ignoreCase = true))
                 }?.firstOrNull()
             } else null
 
