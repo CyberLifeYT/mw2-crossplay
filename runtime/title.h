@@ -31,7 +31,7 @@
 #if defined(MW2_TITLE_MP) && !defined(MW2_VERSION_TU0)
 
 #define MW2_TITLE_NAME  "multiplayer"
-#define T_ENTRY_POINT   0x823A90C8u          // the XEX header's ENTRY_POINT
+#define T_ENTRY_POINT   0x823A7FE0u          // the XEX header's ENTRY_POINT
 
 // D3D9 (statically linked; the same library build in both executables)
 #define T_D3D_Present          820DFD10
@@ -41,17 +41,17 @@
 #define T_D3D_InitVertexShader 820D7588   // the same for a vertex shader
 
 // the job system
-#define T_Job_WaitPredicate    823F0C80
+#define T_Job_WaitPredicate    823EFBA0
 
 // the engine
-#define T_Com_Error            82281FA0
-#define T_Com_Printf           8227F448
-#define T_Cbuf_AddText         82275C60
-#define T_Memcard_InitializeSystem 8233D890
-#define T_Image_FlushMove      823DE738
+#define T_Com_Error            82281758
+#define T_Com_Printf           8227EC30
+#define T_Cbuf_AddText         82275470
+#define T_Memcard_InitializeSystem 8233CAF0
+#define T_Image_FlushMove      823DD658
 // the view's angle, and the zoom the distance culls take from it (field_of_view.cpp)
-#define T_CG_ViewFov           8215B9A8
-#define T_CG_CullZoom          8215BC28
+#define T_CG_ViewFov           8215B9D0
+#define T_CG_CullZoom          8215BC50
 // not located in the multiplayer: T_DB_MissingAsset
 
 // data
@@ -71,7 +71,7 @@
 #elif !defined(MW2_VERSION_TU0)
 
 #define MW2_TITLE_NAME  "campaign"
-#define T_ENTRY_POINT   0x82370940u          // the XEX header's ENTRY_POINT
+#define T_ENTRY_POINT   0x82370938u          // the XEX header's ENTRY_POINT
 
 // D3D9
 #define T_D3D_Present          820C3390
@@ -84,11 +84,11 @@
 #define T_Job_WaitPredicate    823B7840
 
 // the engine
-#define T_Com_Error            822830F0
-#define T_Com_Printf           82280908
-#define T_Cbuf_AddText         8227CF20
+#define T_Com_Error            822830E8
+#define T_Com_Printf           82280900
+#define T_Cbuf_AddText         8227CF18
 #define T_DB_MissingAsset      82172340
-#define T_Memcard_InitializeSystem 8230DF90
+#define T_Memcard_InitializeSystem 8230DF88
 #define T_Image_FlushMove      823A52F8
 #define T_CG_ViewFov           8210FCD8
 #define T_CG_CullZoom          8210FF80
