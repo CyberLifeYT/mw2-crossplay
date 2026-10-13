@@ -275,5 +275,33 @@
             android:layout_height="wrap_content"
             android:layout_marginTop="10dp"
             android:text="@string/forget_install" />
+
+        <!-- storage -->
+        <TextView
+            style="@style/SectionHeading"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="@string/section_storage" />
+
+        <TextView
+            android:id="@+id/storage"
+            style="@style/SettingHint"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="@string/storage_computing" />
+
+        <Button
+            android:id="@+id/clear_shaders"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="10dp"
+            android:text="@string/clear_shaders" />
+
+        <Button
+            android:id="@+id/clear_logs"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="10dp"
+            android:text="@string/clear_logs" />
     </LinearLayout>
 </ScrollView>

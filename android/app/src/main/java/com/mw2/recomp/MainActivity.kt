@@ -1,15 +1,21 @@
 package com.mw2.recomp
 
+import android.app.DownloadManager
+import android.content.BroadcastReceiver
+import android.content.Context
 import android.content.Intent
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
+import android.os.Environment
 import android.view.InputDevice
 import android.widget.Button
 import android.widget.ScrollView
 import android.widget.TextView
+import android.widget.Toast
 import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
+import androidx.core.content.ContextCompat
 import java.io.File
 import java.net.HttpURLConnection
 import java.net.URL
@@ -38,6 +44,17 @@ class MainActivity : AppCompatActivity() {
     private var detectedIsoFile: File? = null
     private var nativeReady = false
     private var hasAutoLaunched = false
+    private var pendingInstallId: Long = -1
+    private var pendingUpdateUrl: String? = null
+
+    private val downloadDone = object : BroadcastReceiver() {
+        override fun onReceive(context: Context, intent: Intent) {
+            val id = intent.getLongExtra(DownloadManager.EXTRA_DOWNLOAD_ID, -1)
+            if (id != pendingInstallId) return
+            pendingInstallId = -1
+            installDownloadedApk(id)
+        }
+    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -109,12 +126,30 @@ class MainActivity : AppCompatActivity() {
             }
         }
         Trail.clear(this)
+        ContextCompat.registerReceiver(
+            this, downloadDone,
+            android.content.IntentFilter(DownloadManager.ACTION_DOWNLOAD_COMPLETE),
+            ContextCompat.RECEIVER_NOT_EXPORTED,
+        )
         checkForUpdates()
+    }
+
+    override fun onDestroy() {
+        try {
+            unregisterReceiver(downloadDone)
+        } catch (_: Throwable) {
+        }
+        super.onDestroy()
     }
 
     override fun onResume() {
         super.onResume()
         refresh()
+        // Back from the install-permission screen with a download waiting.
+        pendingUpdateUrl?.let { url ->
+            pendingUpdateUrl = null
+            if (packageManager.canRequestPackageInstalls()) startUpdateDownload(url)
+        }
     }
 
     private fun refresh() {
@@ -311,7 +346,14 @@ class MainActivity : AppCompatActivity() {
                     // Newest matching release only: older ones stay buried.
                     if (code > installed && tag.isNotEmpty() && tag != prefs.seenUpdateTag) {
                         val page = release.optString("html_url")
-                        runOnUiThread { showUpdateDialog(tag, page, installed, code) }
+                        val apkUrl = (0 until assets.length())
+                            .map { assets.getJSONObject(it) }
+                            .firstOrNull {
+                                it.optString("name").endsWith(".apk", ignoreCase = true) &&
+                                    it.optString("name").contains(want, ignoreCase = true)
+                            }?.optString("browser_download_url") ?: ""
+                        val notes = release.optString("body").take(1500)
+                        runOnUiThread { showUpdateDialog(tag, page, apkUrl, notes, installed, code) }
                     }
                     return@thread
                 }
@@ -320,19 +362,86 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-    private fun showUpdateDialog(tag: String, page: String, installed: Int, code: Int) {
+    private fun showUpdateDialog(tag: String, page: String, apkUrl: String, notes: String, installed: Int, code: Int) {
+        val body = TextView(this)
+        body.setPadding(32, 8, 32, 8)
+        body.textSize = 12f
+        body.text = getString(R.string.update_message, installed, code) + "\n\n" + notes
+        val scroll = ScrollView(this)
+        scroll.addView(body)
         AlertDialog.Builder(this)
             .setTitle(getString(R.string.update_title, tag))
-            .setMessage(getString(R.string.update_message, installed, code))
+            .setView(scroll)
             .setPositiveButton(R.string.update_download) { _, _ ->
-                try {
-                    startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(page)))
-                } catch (_: Throwable) {
-                }
+                if (apkUrl.isNotEmpty()) downloadAndInstall(apkUrl)
+                else openPage(page)
             }
             .setNeutralButton(R.string.skip_version) { _, _ -> prefs.seenUpdateTag = tag }
             .setNegativeButton(R.string.cancel, null)
             .show()
+    }
+
+    private fun openPage(page: String) {
+        try {
+            startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(page)))
+        } catch (_: Throwable) {
+        }
+    }
+
+    private fun downloadAndInstall(apkUrl: String) {
+        if (!packageManager.canRequestPackageInstalls()) {
+            // System sends the user to allow installs from this app; the
+            // download starts when they come back (onResume).
+            pendingUpdateUrl = apkUrl
+            try {
+                startActivity(
+                    Intent(
+                        android.provider.Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES,
+                        Uri.parse("package:$packageName"),
+                    )
+                )
+            } catch (_: Throwable) {
+                pendingUpdateUrl = null
+            }
+            return
+        }
+        startUpdateDownload(apkUrl)
+    }
+
+    private fun startUpdateDownload(apkUrl: String) {
+        try {
+            val manager = getSystemService(DOWNLOAD_SERVICE) as DownloadManager
+            val request = DownloadManager.Request(Uri.parse(apkUrl))
+                .setTitle("MW2 update")
+                .setDescription("Downloading APK")
+                .setNotificationVisibility(DownloadManager.Request.VISIBILITY_VISIBLE_NOTIFY_COMPLETED)
+                .setDestinationInExternalPublicDir(Environment.DIRECTORY_DOWNLOADS, "mw2-update.apk")
+                .setAllowedOverMetered(true)
+            pendingInstallId = manager.enqueue(request)
+            Toast.makeText(this, R.string.update_downloading, Toast.LENGTH_SHORT).show()
+        } catch (_: Throwable) {
+            openPage("https://github.com/CyberLifeYT/mw2-crossplay/releases")
+        }
+    }
+
+    private fun installDownloadedApk(id: Long) {
+        try {
+            val manager = getSystemService(DOWNLOAD_SERVICE) as DownloadManager
+            val uri = manager.getUriForDownloadedFile(id) ?: return
+            val intent = Intent(Intent.ACTION_VIEW).apply {
+                setDataAndType(uri, "application/vnd.android.package-archive")
+                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_GRANT_READ_URI_PERMISSION)
+            }
+            startActivity(intent)
+        } catch (_: Throwable) {
+            AlertDialog.Builder(this)
+                .setMessage(R.string.update_failed)
+                .setPositiveButton(R.string.open_page) { _, _ ->
+                    openPage("https://github.com/CyberLifeYT/mw2-crossplay/releases")
+                }
+                .setNegativeButton(R.string.cancel, null)
+                .show()
+        }
     }
 
     private fun showLastCrash(crash: String) {

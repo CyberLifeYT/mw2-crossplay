@@ -133,7 +133,81 @@ class SettingsActivity : AppCompatActivity() {
                 }
                 .show()
         }
+
+        // ---- storage ----
+        val storage: TextView = findViewById(R.id.storage)
+        refreshStorage(storage)
+        findViewById<Button>(R.id.clear_shaders).setOnClickListener {
+            shaderCacheFiles().forEach { try { it.delete() } catch (_: Throwable) {} }
+            storage.text = getString(R.string.shaders_cleared)
+            refreshStorage(storage)
+        }
+        findViewById<Button>(R.id.clear_logs).setOnClickListener {
+            listOf("game.log", "launcher.log", "last-crash-game.txt", "last-crash-launcher.txt").forEach {
+                try {
+                    java.io.File(filesDir, it).delete()
+                } catch (_: Throwable) {
+                }
+            }
+            storage.text = getString(R.string.logs_cleared)
+            refreshStorage(storage)
+        }
     }
+
+    private fun gameBase(): java.io.File = getExternalFilesDir(null) ?: filesDir
+
+    private fun shaderCacheFiles(): List<java.io.File> {
+        val base = gameBase()
+        return listOf(
+            java.io.File(base, "shader_cache.bin"),
+            java.io.File(filesDir, "shader_cache.bin"),
+            java.io.File(filesDir, "pipeline.cache"),
+        )
+    }
+
+    private fun refreshStorage(view: TextView) {
+        view.text = getString(R.string.storage_computing)
+        Thread {
+            fun sizeOf(dir: java.io.File): Long = try {
+                if (dir.isFile) dir.length()
+                else dir.walkTopDown().filter { it.isFile }.sumOf { it.length() }
+            } catch (_: Throwable) {
+                0L
+            }
+            val gameDir = prefs.gameDirectory.ifEmpty { null }?.let { java.io.File(it) }
+            val base = gameBase()
+            val saves = java.io.File(
+                (gameDir?.parent ?: base.absolutePath) + "/saves",
+            )
+            val rows = listOf(
+                getString(R.string.install_game) to (gameDir?.let { sizeOf(it) } ?: 0L),
+                getString(R.string.saves_files) to sizeOf(saves),
+                getString(R.string.clear_shaders) to shaderCacheFiles().sumOf {
+                    try {
+                        it.length()
+                    } catch (_: Throwable) {
+                        0L
+                    }
+                },
+                getString(R.string.view_log) to listOf(
+                    "game.log", "launcher.log", "last-crash-game.txt", "last-crash-launcher.txt",
+                ).sumOf {
+                    try {
+                        java.io.File(filesDir, it).length()
+                    } catch (_: Throwable) {
+                        0L
+                    }
+                },
+            )
+            val text = rows.joinToString("\n") { (label, bytes) ->
+                getString(R.string.storage_line, label, formatSize(bytes))
+            }
+            runOnUiThread { view.text = text }
+        }.start()
+    }
+
+    private fun formatSize(bytes: Long): String =
+        android.text.format.Formatter.formatFileSize(this, bytes)
 
     private fun textureText(step: Int): String =
         if (step == 0) getString(R.string.texture_budget_auto)

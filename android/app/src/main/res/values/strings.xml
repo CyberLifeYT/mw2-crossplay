@@ -93,6 +93,14 @@
     <string name="edit_controls_where">The on-screen pad is edited in the game: pause and choose “Edit controls”.</string>
     <string name="forget_install">Forget the installed files</string>
     <string name="forget_explained">The files stay on the phone; the app simply stops using them, and the next install can point somewhere else.</string>
+    <string name="section_storage">Storage</string>
+    <string name="storage_computing">Measuring…</string>
+    <string name="saves_files">Saves</string>
+    <string name="storage_line">%1$s: %2$s</string>
+    <string name="clear_shaders">Clear shader cache</string>
+    <string name="clear_logs">Clear logs</string>
+    <string name="shaders_cleared">Shader cache cleared. Shaders rebuild as you play.</string>
+    <string name="logs_cleared">Logs cleared.</string>
     <string name="paths_line">Installed in:\n%1$s</string>
     <string name="paths_none">Nothing installed yet.</string>
 
@@ -124,7 +132,10 @@
     <!-- self-update -->
     <string name="update_title">Update available: %1$s</string>
     <string name="update_message">This install is build %1$d, the release carries build %2$d.\n\nOpen the release page and install the APK over this one — no uninstall, no data loss.</string>
-    <string name="update_download">Open release page</string>
+    <string name="update_download">Download &amp; install</string>
+    <string name="update_downloading">Downloading update…</string>
+    <string name="update_failed">The download failed. Open the release page instead.</string>
+    <string name="open_page">Release page</string>
     <string name="skip_version">Skip this version</string>
 
     <!-- in the game -->
