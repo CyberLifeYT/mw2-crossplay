@@ -158,6 +158,16 @@ jobs:
             fi
           done
 
+      - name: Map title.h hooks disc-to-TU6 from the failure
+        # The TU0 title.h blocks are verified (those builds run); several TU6
+        # addresses are stale for our copies ("use of undeclared identifier
+        # 'sub_XXXXXXXX'"). This matches every TU6 hook against the disc
+        # executable by its code and prints the corrected #defines. Names and
+        # addresses only, no game data.
+        if: failure()
+        run: |
+          python3 tools/map_tu6.py || true
+
       - name: Save the compiler cache
         if: always()
         uses: actions/cache/save@v4
@@ -316,6 +326,16 @@ jobs:
               echo "missing inputs, skipping"
             fi
           done
+
+      - name: Map title.h hooks disc-to-TU6 from the failure
+        # The TU0 title.h blocks are verified (those builds run); several TU6
+        # addresses are stale for our copies ("use of undeclared identifier
+        # 'sub_XXXXXXXX'"). This matches every TU6 hook against the disc
+        # executable by its code and prints the corrected #defines. Names and
+        # addresses only, no game data.
+        if: failure()
+        run: |
+          python3 tools/map_tu6.py || true
 
       - name: Save the compiler cache
         if: always()
