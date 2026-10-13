@@ -3,6 +3,7 @@
 #include "download.h"
 #include "package.h"
 #include "../runtime/install/crypto.h"
+#include "../runtime/install/install.h"
 #include "../runtime/install/xex.h"
 
 #include <xex_patcher.h>
@@ -115,11 +116,11 @@ namespace
         return endsWith(".ff") || endsWith(".pak") || endsWith(".bik");
     }
 
-    // Copies the disc's game files into game/. What is already there, whole,
-    // is kept: an install cut short resumes.
+    // Copies the disc's game files into the game folder. What is already there,
+    // whole, is kept: an install cut short resumes.
     setup::Result CopyGame(install::Source& source, const fs::path& from, setup::Progress& progress, std::string& error)
     {
-        const fs::path folder = kGameFolder;
+        const fs::path folder = setup::GameFolder();
         std::error_code ec;
         uint64_t needed = 0;
         std::vector<const install::Source::File*> copy;
@@ -217,7 +218,65 @@ namespace
 #endif
 }
 
-fs::path setup::GameFolder() { return kGameFolder; }
+fs::path setup::GameFolder()
+{
+    // The executables' own folder: the launcher runs with it current
+    // (main.cpp moves there at start-up).
+    std::error_code ec;
+    const fs::path beside = fs::current_path(ec);
+    if (!ec)
+        if (const fs::path at = install::InstallLocation(beside); !at.empty())
+            return at / kGameFolder;
+    return kGameFolder;
+}
+
+fs::path setup::InstallLocation()
+{
+    std::error_code ec;
+    const fs::path beside = fs::current_path(ec);
+    if (ec) return {};
+    return install::InstallLocation(beside);
+}
+
+bool setup::SetInstallLocation(const fs::path& folder, std::string& error)
+{
+    std::error_code ec;
+    const fs::path beside = fs::current_path(ec);
+    if (ec) { error = "Cannot find the launcher's own folder."; return false; }
+    const fs::path file = beside / install::kInstallLocationFile;
+    if (folder.empty())
+    {
+        fs::remove(file, ec);
+        return true;
+    }
+    if (!folder.is_absolute()) { error = "Give an absolute folder, such as D:\\Games\\MW2."; return false; }
+    fs::create_directories(folder, ec);
+    if (ec) { error = "Cannot create " + Utf8(folder) + ": " + ec.message(); return false; }
+    {
+        const fs::path probe = folder / ".mw2-write-test";
+        std::ofstream out(probe, std::ios::binary | std::ios::trunc);
+        if (!out) { error = "Cannot write to " + Utf8(folder) + "."; return false; }
+        out.close();
+        fs::remove(probe, ec);
+    }
+    const std::string text = Utf8(folder) + "\n";
+    Bytes bytes(text.begin(), text.end());
+    return WriteFile(file, bytes, error);
+}
+
+std::string setup::InstallLocationText()
+{
+    const fs::path at = InstallLocation();
+    std::error_code ec;
+    const fs::path shown = at.empty() ? fs::current_path(ec) : at;
+    const auto space = fs::space(shown, ec);
+    char text[320];
+    if (!ec)
+        std::snprintf(text, sizeof text, "%s (%.1f GB free)", Utf8(shown).c_str(), space.available / 1e9);
+    else
+        std::snprintf(text, sizeof text, "%s", Utf8(shown).c_str());
+    return text;
+}
 
 #ifdef MW2_VERSION_TU0
 const char* setup::UpdateUrl() { return ""; }
@@ -235,7 +294,7 @@ setup::State setup::Detect()
     for (const Title& title : kTitles)
     {
         Bytes file;
-        if (!ReadFile(fs::path(kGameFolder) / title.xex, file)) return State::NotInstalled;
+        if (!ReadFile(GameFolder() / title.xex, file)) return State::NotInstalled;
         const std::string hash = Sha256(file);
         installed = installed && hash == title.installed;
         known = known && (hash == title.installed || hash == title.disc);
@@ -251,7 +310,7 @@ setup::Result setup::Run(const fs::path& disc, const fs::path& update, Progress&
         progress.step = 0;
         progress.steps = (copies ? 3 : 1) + (UsesUpdate() ? 2 : 0);
     }
-    const fs::path folder = kGameFolder;
+    const fs::path folder = setup::GameFolder();
     std::error_code ec;
     fs::create_directories(folder, ec);
     if (ec) { error = "Cannot create " + Utf8(fs::absolute(folder)) + ": " + ec.message(); return Result::Failed; }

@@ -76,9 +76,31 @@ recompiles and builds on a GitHub runner:
      assets repo only. Sent as an `Authorization` header — never embed tokens
      in the URL (URL parsers choke on them and they leak into request lines).
 3. Android `versionCode` (`android/app/build.gradle.kts`) **must go up with
-   every published release** (currently 2, or set `MW2_VERSION_CODE` in CI) —
+   every published release** (currently 3, or set `MW2_VERSION_CODE` in CI) —
    Android will not install an update over an APK with an equal or higher
    code. Both flavors share the number (they are separate packages).
+
+## Release policy (standing)
+
+Every update ships through CI; skip only components whose code did not change:
+
+1. Bump Android `versionCode` iff `android/` or `runtime/` changed (the
+   native lib ships inside the APK).
+2. Push: `Build Android APK` (campaign) runs itself; dispatch `Build MP APK`.
+3. New tag (`v0.1.0-alpha.N`), pre-release, with notes.
+4. Dispatch `Build PC TU0` with that tag: it attaches the PC archives itself.
+5. Attach both APK artifacts to the release by hand (workflows do not).
+6. Never attach or commit game files (ISO/XEX/PE/fastfiles) anywhere.
+
+## Install location (PC)
+
+The launcher no longer forces the ~7 GB of game files beside itself on C:.
+`INSTALL LOCATION` in the launcher (or `mw2-launcher --install --install-dir
+D:\Games\MW2`) names any absolute folder, on any drive; installs go to
+`game/` under it, remembered in `install_location.txt` beside the
+executables, which the game reads at start. Saves stay beside the launcher.
+Files already installed stay where they are — the choice applies going
+forward. Space is checked at install time either way.
 2. Push this branch to your fork.
 3. Actions → **`Build MP APK`** → Run workflow (no inputs — it builds the
    multiplayer flavor from `GAME_ARCHIVE_URL`, disc TU0, LAN backend).

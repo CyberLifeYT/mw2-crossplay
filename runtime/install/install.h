@@ -4,10 +4,17 @@
 // into game/. With no install there, or another version's, it starts the
 // launcher instead.
 //
+// The game folder can live on another drive: the launcher's INSTALL LOCATION
+// names a folder in install_location.txt beside the executables, and both
+// the launcher and the game read it (InstallLocation, below). Absent, the
+// game folder is game/ beside the executables. Saves stay beside them in
+// saves/ either way: they are small, the game files are not.
+//
 // A run given an image and a game folder on the command line is a
 // development run and skips all of this.
 #include <cstdint>
 #include <filesystem>
+#include <fstream>
 #include <string>
 #include <vector>
 
@@ -18,6 +25,29 @@ namespace install
         std::vector<uint8_t> image;         // the title's memory image
         std::filesystem::path gameRoot;
     };
+
+    // The install-location file both sides read: one UTF-8 line naming the
+    // folder the game files live in. Written by the launcher after checking
+    // the folder is absolute and creatable; writers, not readers, validate.
+    constexpr const char* kInstallLocationFile = "install_location.txt";
+
+    // That folder, or empty when there is no file, it is blank, or it does
+    // not name an absolute path. `beside` is the executables' own folder.
+    inline std::filesystem::path InstallLocation(const std::filesystem::path& beside)
+    {
+        std::ifstream in(beside / kInstallLocationFile, std::ios::binary);
+        if (!in) return {};
+        std::string line;
+        std::getline(in, line);
+        while (!line.empty() && (line.back() == '\n' || line.back() == '\r' ||
+                                 line.back() == ' ' || line.back() == '\t'))
+            line.pop_back();
+        if (line.empty()) return {};
+        const char8_t* bytes = reinterpret_cast<const char8_t*>(line.data());
+        const std::filesystem::path folder(std::u8string(bytes, line.size()));
+        if (!folder.is_absolute()) return {};
+        return folder.lexically_normal();
+    }
 
     // True when the command line asks for a player's start.
     bool PlayerStart(int argc, char** argv);

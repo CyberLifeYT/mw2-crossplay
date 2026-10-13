@@ -189,7 +189,7 @@ namespace
     // What an entry does.
     enum class Action
     {
-        None, PlayCampaign, PlayMultiplayer, Install, ChooseUpdate, Cancel, Quit,
+        None, PlayCampaign, PlayMultiplayer, Install, InstallLocation, ChooseUpdate, Cancel, Quit,
         // The profile screen and what it does.
         Profile, Back, NextPlayer, Rename, PlayAs, MaxRank, Prestige, UnlockEverything, UnlockMissions, AllStars,
         CheckUpdate, InstallUpdate,
@@ -287,6 +287,24 @@ namespace
                 &picked, window, filters, 2, nullptr, false);
         }
 
+        void AskFolder(Action forAction)
+        {
+            {
+                std::lock_guard lock(picked.lock);
+                picked.answered = false;
+                picked.forAction = forAction;
+            }
+            SDL_ShowOpenFolderDialog(
+                [](void* data, const char* const* list, int) {
+                    auto* p = static_cast<Picked*>(data);
+                    std::lock_guard lock(p->lock);
+                    p->failed = !list;
+                    p->path = (list && *list) ? *list : "";
+                    p->answered = true;
+                },
+                &picked, window, nullptr, false);
+        }
+
         void Install(const fs::path& from, const fs::path& update)
         {
             message.clear();
@@ -313,6 +331,9 @@ namespace
                 // The disc's files are there already: the update is all that is missing.
                 if (state == setup::State::NeedsUpdate) Install({}, {});
                 else Ask(Action::Install, "Disc image", "iso");
+                break;
+            case Action::InstallLocation:
+                AskFolder(Action::InstallLocation);
                 break;
             case Action::ChooseUpdate:
                 Ask(Action::ChooseUpdate, "Title update", "*");
@@ -682,6 +703,21 @@ namespace
         {
             if (job || path.empty()) return;
             if (forAction == Action::ChooseUpdate) Install(state == setup::State::NeedsUpdate ? fs::path() : disc, FromUtf8(path));
+            else if (forAction == Action::InstallLocation)
+            {
+                // A drive with room, not just beside the launcher: the ~7 GB
+                // of game files go under the chosen folder from now on.
+                std::string error;
+                if (setup::SetInstallLocation(FromUtf8(path), error))
+                {
+                    message = "Game files go in:\n" + setup::InstallLocationText();
+                    messageIsError = false;
+                }
+                else { message = error; messageIsError = true; }
+                state = setup::Detect();
+                sound::Load();
+                focusPlaced = false;
+            }
             else { disc = FromUtf8(path); Install(disc, {}); }
         }
 
@@ -827,12 +863,17 @@ namespace
                                "The update is downloaded (2 MB) and applied to the installed game. Your disc is not needed.");
                 return add(Action::Install, installed ? "REINSTALL" : "INSTALL GAME", true, "INSTALL",
                            std::string("Choose the image of your Xbox 360 disc (.iso), or drop it on this window.\n\n"
-                                       "Its files, about 7 GB, are copied into the game folder beside the launcher") +
+                                       "Its files, about 7 GB, are copied into the game folder (INSTALL LOCATION picks the drive)") +
                                (setup::UsesUpdate() ? ", and title update 6 is downloaded (2 MB) and applied." : ".") +
                                "\n\nThe disc is the USA/Europe one, version 1.0.557.");
             };
             const bool reinstall = installed && !needsUpdateFile;
             if (!reinstall) install()->shown.ruleAbove = true;
+            add(Action::InstallLocation, "INSTALL LOCATION", true, "INSTALL LOCATION",
+                std::string("Where the game files go. Now:\n") + setup::InstallLocationText() +
+                "\n\nChoose any folder, on any drive with room: about 7 GB is copied there at install time, "
+                "instead of beside the launcher. Saves stay beside the launcher, and files already "
+                "installed stay where they are.");
 
             // What the game is played with.
             add(Action::Graphics, "GRAPHICS", true, "GRAPHICS", "The size the game draws at, how many frames a second and how wide its view is.")->shown.ruleAbove = true;
@@ -1092,13 +1133,14 @@ int main(int argc, char** argv)
     // The paths on the command line are the terminal's; everything a player's
     // copy keeps -- game/, saves/ -- is beside the launcher.
     std::error_code ec;
-    fs::path disc, update;
+    fs::path disc, update, installDir;
     const bool upgrade = arguments.size() == 1 && arguments[0] == "--upgrade";
     bool usage = !arguments.empty() && arguments[0] != "--install" && !upgrade;
     for (size_t i = 1; i < arguments.size() && !usage; i++)
     {
         const std::string text = Utf8(arguments[i]);
         if (text == "--update" && i + 1 < arguments.size()) update = fs::absolute(arguments[++i], ec);
+        else if (text == "--install-dir" && i + 1 < arguments.size()) installDir = fs::absolute(arguments[++i], ec);
         else if (text[0] != '-' && disc.empty()) disc = fs::absolute(arguments[i], ec);
         else usage = true;
     }
@@ -1112,11 +1154,17 @@ int main(int argc, char** argv)
     {
         if (usage)
         {
-            std::fprintf(stderr, "usage: %s --install [<disc image or extracted disc folder>] [--update <package or folder>]\n"
+            std::fprintf(stderr, "usage: %s --install [<disc image or extracted disc folder>] [--update <package or folder>] [--install-dir <folder for the game files>]\n"
                                  "       %s --upgrade\n", argv[0], argv[0]);
             return 2;
         }
         if (upgrade) return UpgradeInTerminal();
+        if (!installDir.empty())
+        {
+            std::string error;
+            if (!setup::SetInstallLocation(installDir, error)) { std::fprintf(stderr, "%s\n", error.c_str()); return 1; }
+            std::printf("Game files go in %s.\n", setup::InstallLocationText().c_str());
+        }
         return InstallInTerminal(disc, update);
     }
     return Window(updated);

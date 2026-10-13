@@ -334,6 +334,10 @@ bool install::Prepare(int, char**, Launch& launch, int& exitCode)
     // Everything a player's copy keeps -- game/, saves/ -- is beside the executable.
     std::error_code ec;
     if (const fs::path folder = ExecutableFolder(); !folder.empty()) fs::current_path(folder, ec);
+    // ...unless the launcher put the game files on another drive (INSTALL
+    // LOCATION): same file it wrote, beside this program too.
+    if (const fs::path at = InstallLocation(ExecutableFolder()); !at.empty())
+        SetGameFolder(at / kGameFolder);
 
     std::string error;
     switch (LoadInstalled(launch.image, error))
