@@ -691,6 +691,9 @@ class GameActivity : AppCompatActivity(), NativeListener {
             NativeBridge.nativeSetOption("MW2_SCALE", prefs.renderScale.toString())
         }
         NativeBridge.nativeSetOption("MW2_STUTTERS", "1")
+        // Full synchronous precompile at boot when the player asked for it in
+        // Settings; otherwise the tiered instant-boot budget + background warmup.
+        NativeBridge.nativeSetOption("MW2_SHADER_PREWARM_ALL", if (prefs.prewarmAllShaders) "1" else "")
         NativeBridge.nativeSetOption(
             "MW2_TEXTURE_BUDGET_MB",
             if (prefs.textureBudgetMB > 0) prefs.textureBudgetMB.toString() else "",

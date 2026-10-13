@@ -201,6 +201,10 @@ namespace android::perf
     // this device, before anything reads them. Never overrides a value the
     // app set itself.
     void ApplyMemoryDefaults();
+    // The instant-boot shader budget, sized for this device: how many
+    // recorded pipelines PrewarmFromCache compiles synchronously, and the
+    // deadline for them. Bigger phones compile more up front and warm sooner.
+    void PrewarmBudget(uint32_t& maxSync, uint32_t& deadlineMs);
 }
 
 #endif  // MW2_ANDROID

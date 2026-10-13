@@ -106,6 +106,19 @@
             android:layout_height="wrap_content"
             android:text="@string/texture_hint" />
 
+        <androidx.appcompat.widget.SwitchCompat
+            android:id="@+id/prewarm_all"
+            style="@style/SettingSwitch"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="@string/prewarm_all" />
+
+        <TextView
+            style="@style/SettingHint"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="@string/prewarm_all_hint" />
+
         <!-- sound -->
         <TextView
             style="@style/SectionHeading"

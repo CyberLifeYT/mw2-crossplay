@@ -152,6 +152,24 @@ class Prefs(context: Context) {
         get() = store.getBoolean(KEY_AUTO_LAUNCH, true)
         set(value) = store.edit().putBoolean(KEY_AUTO_LAUNCH, value).apply()
 
+    /**
+     * The split-screen heat warning, shown once when starting the game with a
+     * physical controller attached (player 2). Extra viewports cost frames
+     * and the phone gets hot; nobody needs telling twice.
+     */
+    var seenPadWarning: Boolean
+        get() = store.getBoolean(KEY_PAD_WARNING, false)
+        set(value) = store.edit().putBoolean(KEY_PAD_WARNING, value).apply()
+
+    /**
+     * Compile every recorded pipeline synchronously at boot instead of the
+     * small instant-boot budget (MW2_SHADER_PREWARM_ALL). Boot takes minutes
+     * on a cold cache but there is no warmup debt left afterwards.
+     */
+    var prewarmAllShaders: Boolean
+        get() = store.getBoolean(KEY_PREWARM_ALL, false)
+        set(value) = store.edit().putBoolean(KEY_PREWARM_ALL, value).apply()
+
     companion object {
         private const val KEY_RESOLUTION = "resolutionScale"
         private const val KEY_RENDER_SCALE = "renderScale"
@@ -175,5 +193,7 @@ class Prefs(context: Context) {
         private const val KEY_LAST_BROWSED = "lastBrowsed"
         private const val KEY_WELCOME = "seenWelcome"
         private const val KEY_AUTO_LAUNCH = "autoLaunch"
+        private const val KEY_PAD_WARNING = "seenPadWarning"
+        private const val KEY_PREWARM_ALL = "prewarmAllShaders"
     }
 }

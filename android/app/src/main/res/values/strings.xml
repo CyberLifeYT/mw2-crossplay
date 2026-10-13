@@ -96,6 +96,16 @@
     <string name="paths_line">Installed in:\n%1$s</string>
     <string name="paths_none">Nothing installed yet.</string>
 
+    <!-- split-screen (a physical controller means a second player) -->
+    <string name="splitscreen_title">Two-player split-screen?</string>
+    <string name="splitscreen_warning">A controller is attached, so a second player can join: Spec Ops co-op and split-screen multiplayer take a second player through the game\u2019s sign-in screen.\n\nHeads-up: two viewports cost frames. Expect dips below 60 FPS, a hot phone, and fast battery drain — lower the display resolution first on weaker devices.</string>
+    <string name="play_anyway">Play anyway</string>
+    <string name="dont_show_again">Don\u2019t show again</string>
+
+    <!-- shader prewarming -->
+    <string name="prewarm_all">Compile all shaders at boot</string>
+    <string name="prewarm_all_hint">Compiles every recorded pipeline before the title screen instead of warming them up during play. Boot takes minutes on a cold cache and the phone gets warm, but there is almost no in-game shader stutter left afterwards. Off means the quick 2-second boot with background warmup.</string>
+
     <!-- in the game -->
     <string name="menu">Menu</string>
     <string name="paused">Paused</string>

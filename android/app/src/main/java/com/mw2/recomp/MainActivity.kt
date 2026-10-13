@@ -2,6 +2,7 @@ package com.mw2.recomp
 
 import android.content.Intent
 import android.os.Bundle
+import android.view.InputDevice
 import android.widget.Button
 import android.widget.ScrollView
 import android.widget.TextView
@@ -236,7 +237,40 @@ class MainActivity : AppCompatActivity() {
 
     private fun startGame() {
         if (!nativeReady) return
+        // A physical pad means a second player can join (split-screen Spec
+        // Ops / multiplayer). Warn once: two viewports cost frames and heat.
+        if (!prefs.seenPadWarning && physicalPadCount() > 0) {
+            showSplitscreenWarning()
+            return
+        }
         GameActivity.start(this)
+    }
+
+    private fun physicalPadCount(): Int {
+        var count = 0
+        for (id in InputDevice.getDeviceIds()) {
+            val device = InputDevice.getDevice(id) ?: continue
+            if (device.isVirtual) continue
+            val sources = device.sources
+            if (sources and InputDevice.SOURCE_GAMEPAD == InputDevice.SOURCE_GAMEPAD ||
+                sources and InputDevice.SOURCE_JOYSTICK == InputDevice.SOURCE_JOYSTICK) {
+                count++
+            }
+        }
+        return count
+    }
+
+    private fun showSplitscreenWarning() {
+        AlertDialog.Builder(this)
+            .setTitle(R.string.splitscreen_title)
+            .setMessage(R.string.splitscreen_warning)
+            .setPositiveButton(R.string.play_anyway) { _, _ -> GameActivity.start(this) }
+            .setNegativeButton(R.string.cancel, null)
+            .setNeutralButton(R.string.dont_show_again) { _, _ ->
+                prefs.seenPadWarning = true
+                GameActivity.start(this)
+            }
+            .show()
     }
 
     private fun showLastCrash(crash: String) {

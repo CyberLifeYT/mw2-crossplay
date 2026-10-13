@@ -153,6 +153,26 @@ uint32_t android::perf::AvailableMemoryMB()
     return uint32_t((available ? available : MemInfoKB("MemFree")) / 1024);
 }
 
+// The instant-boot shader budget, sized for this device. A weak phone keeps
+// the conservative default (15 pipelines / 250 ms: sub-2-second boot); a
+// strong one compiles more up front and finishes warming sooner. Overridable
+// for testing: MW2_PREWARM_MAX / MW2_PREWARM_MS, either one alone leaving the
+// other at its tier.
+void android::perf::PrewarmBudget(uint32_t& maxSync, uint32_t& deadlineMs)
+{
+    std::call_once(g_cpusOnce, FindCores);
+    const uint32_t totalMB = TotalMemoryMB();
+    if (totalMB >= 8000 && g_bigCoreCount >= 4) { maxSync = 40; deadlineMs = 600; }
+    else if (totalMB >= 6000)                   { maxSync = 25; deadlineMs = 400; }
+    else                                        { maxSync = 15; deadlineMs = 250; }
+    const uint64_t overrideMax = env::Number("MW2_PREWARM_MAX");
+    const uint64_t overrideMs = env::Number("MW2_PREWARM_MS");
+    if (overrideMax) maxSync = uint32_t(std::min<uint64_t>(overrideMax, 5000));
+    if (overrideMs) deadlineMs = uint32_t(std::min<uint64_t>(overrideMs, 60000));
+    LOGI("perf: prewarm budget %u pipelines / %u ms (%u MB RAM, %u fast cores)",
+         maxSync, deadlineMs, totalMB, g_bigCoreCount);
+}
+
 // The defaults the renderer reads out of the environment, sized for this
 // device. Set with overwrite = 0, so anything the player chose in the app
 // wins.

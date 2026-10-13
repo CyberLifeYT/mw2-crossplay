@@ -51,6 +51,7 @@ class SettingsActivity : AppCompatActivity() {
 
         switch(R.id.msaa, prefs.multisampling) { prefs.multisampling = it }
         switch(R.id.prefer60, prefs.prefer60Hz) { prefs.prefer60Hz = it }
+        switch(R.id.prewarm_all, prefs.prewarmAllShaders) { prefs.prewarmAllShaders = it }
 
         val fovLabel: TextView = findViewById(R.id.fov_label)
         val fovSlider: SeekBar = findViewById(R.id.fov_slider)

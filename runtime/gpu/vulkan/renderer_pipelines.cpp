@@ -17,6 +17,7 @@
 #include <unordered_set>
 #ifdef MW2_ANDROID
 #include <sys/resource.h>
+#include "../../android/android.h"
 #endif
 
 #ifdef MW2_HAVE_VULKAN
@@ -806,9 +807,19 @@ namespace vk::renderer::detail
 
         g.prewarmWanted = uint32_t(wanted.size());
         const bool hasFastLibraries = vk::pipeline::PipelineLibraries();
-        constexpr uint32_t kMaxSyncPrewarm = 15;
-        const auto syncDeadline = start + std::chrono::milliseconds(250);
+        // The whole recorded set, synchronously, when the player asked for it
+        // in Settings (MW2_SHADER_PREWARM_ALL): slow boot, no warmup debt
+        // afterwards. Otherwise the instant-boot budget, sized for this
+        // device (android::perf::PrewarmBudget).
+        const bool prewarmAll = env::Flag("MW2_SHADER_PREWARM_ALL");
+        uint32_t maxSync = 15, deadlineMs = 250;
+#ifdef MW2_ANDROID
+        if (!prewarmAll) android::perf::PrewarmBudget(maxSync, deadlineMs);
+#endif
+        const auto syncDeadline = start + std::chrono::milliseconds(deadlineMs);
         uint32_t last = 0;
+        LOGI("renderer: prewarming %u recorded pipelines%s", uint32_t(wanted.size()),
+             prewarmAll ? ", all of them synchronously" : "");
 
         for (size_t i = 0; i < wanted.size(); i++)
         {
@@ -835,13 +846,14 @@ namespace vk::renderer::detail
 
             g.recorded.push_back(want);
 
-            const bool syncCandidate = (i < kMaxSyncPrewarm) &&
-                                       (hasFastLibraries || std::chrono::steady_clock::now() < syncDeadline);
+            const bool syncCandidate = prewarmAll || ((i < maxSync) &&
+                                       (hasFastLibraries || std::chrono::steady_clock::now() < syncDeadline));
             if (syncCandidate)
             {
                 if (EnsurePipeline(key, vertex->second, pixel->second)) g.prewarmed++;
                 const uint32_t percent = 100 * uint32_t(i + 1) / uint32_t(wanted.size());
-                if (percent >= last + 25) { LOGI("compiling shaders: %u%%", percent); last = percent; }
+                const uint32_t step = prewarmAll ? 10 : 25;
+                if (percent >= last + step) { LOGI("compiling shaders: %u%%", percent); last = percent; }
             }
             else
             {
