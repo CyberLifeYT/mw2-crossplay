@@ -148,8 +148,11 @@ jobs:
               mp) tables=config/mw2mp_switch_tables.toml ;;
             esac
             echo "===== $title ($tables) ====="
-            if [ -f "$tables" ] && [ -f "logs-analyse-$title-tu6.txt" ]; then
-              MW2_TITLE=$title MW2_VERSION=tu6 python3 tools/fixbounds.py "$tables" "logs-analyse-$title-tu6.txt" || true
+            # The recompiler's log carries the jump-table errors (the
+            # analyser's own log only has its tables); fixbounds derives the
+            # config TOML entries from those, the tables and the PE.
+            if [ -f "$tables" ] && [ -f "logs-recomp-$title-tu6.txt" ]; then
+              MW2_TITLE=$title MW2_VERSION=tu6 python3 tools/fixbounds.py "$tables" "logs-recomp-$title-tu6.txt" || true
             else
               echo "missing inputs, skipping"
             fi
@@ -304,8 +307,11 @@ jobs:
               mp) tables=config/mw2mp_switch_tables.toml ;;
             esac
             echo "===== $title ($tables) ====="
-            if [ -f "$tables" ] && [ -f "logs-analyse-$title-tu6.txt" ]; then
-              MW2_TITLE=$title MW2_VERSION=tu6 python3 tools/fixbounds.py "$tables" "logs-analyse-$title-tu6.txt" || true
+            # The recompiler's log carries the jump-table errors (the
+            # analyser's own log only has its tables); fixbounds derives the
+            # config TOML entries from those, the tables and the PE.
+            if [ -f "$tables" ] && [ -f "logs-recomp-$title-tu6.txt" ]; then
+              MW2_TITLE=$title MW2_VERSION=tu6 python3 tools/fixbounds.py "$tables" "logs-recomp-$title-tu6.txt" || true
             else
               echo "missing inputs, skipping"
             fi
