@@ -1,0 +1,225 @@
+# Builds the multiplayer APK for this fork from the private assets repo.
+#
+# Unlike build-apk.yml (campaign only, from the committed ppc/ tree), this
+# recompiles default_mp.xex itself -- ppc_mp_tu0/ is generated, never
+# committed -- then builds the multiplayer flavor
+# (-DMW2_TITLE=mp -DMW2_ONLINE=lan, see android/app/build.gradle.kts).
+#
+# Needs one secret:
+#   GAME_ARCHIVE_URL  a zip holding default.xex + default_mp.xex (disc TU0),
+#                     e.g. https://x-access-token:<ro-token>@raw.githubusercontent.com/<you>/mw2-assets/main/mw2-xex-tu0.zip
+# The URL is masked in logs, and mw2/ is deleted off the runner before the
+# APK is built, so no game file can end up in an artifact.
+#
+# First run is long (MP recompile ~1h + cold NDK compile); ppc_mp_tu0/ and
+# ccache are cached, so re-running after a timeout resumes rather than
+# restarting.
+name: Build MP APK
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  NDK_VERSION: "28.2.13676358"
+  CCACHE_DIR: ${{ github.workspace }}/.ccache
+  CCACHE_BASEDIR: ${{ github.workspace }}
+  CCACHE_MAXSIZE: 5G
+  CCACHE_COMPILERCHECK: content
+  CCACHE_SLOPPINESS: time_macros,include_file_mtime,include_file_ctime
+
+jobs:
+  apk:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 355
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Make room on the disk
+        run: |
+          echo "before:"; df -h / | tail -1
+          sudo rm -rf /usr/share/dotnet /usr/local/lib/android/sdk/ndk \
+                      /opt/ghc /usr/local/share/boost /usr/share/swift \
+                      /usr/local/lib/node_modules /opt/hostedtoolcache/CodeQL || true
+          sudo apt-get clean
+          echo "after:"; df -h / | tail -1
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Install the toolchain
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y clang-18 lld-18 ninja-build ccache cmake \
+                                  python3 p7zip-full
+
+      - name: Install the NDK
+        run: |
+          sdkmanager="$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager"
+          yes | "$sdkmanager" --licenses > /dev/null 2>&1 || true
+          "$sdkmanager" --install "ndk;$NDK_VERSION" "platforms;android-35" \
+                                  "build-tools;35.0.0" "cmake;3.22.1" > /dev/null
+          echo "ANDROID_NDK_HOME=$ANDROID_HOME/ndk/$NDK_VERSION" >> "$GITHUB_ENV"
+          echo "installed NDK $NDK_VERSION"
+
+      - name: Fetch libadrenotools
+        run: ./android/fetch_deps.sh
+
+      - name: Fetch the game's executables
+        id: fetch
+        env:
+          ARCHIVE_URL: ${{ secrets.GAME_ARCHIVE_URL }}
+        run: |
+          set -euo pipefail
+          if [ -z "$ARCHIVE_URL" ]; then
+            echo "::error::GAME_ARCHIVE_URL secret is empty. See CROSSPLAY.md."
+            exit 1
+          fi
+          echo "::add-mask::$ARCHIVE_URL"
+          python3 tools/fetch_asset.py --into mw2 --github-output \
+            --require default.xex,default_mp.xex "$ARCHIVE_URL"
+          # Disc version (TU0): the executables live in mw2/tu0/.
+          mkdir -p mw2/tu0
+          cp mw2/default.xex mw2/default_mp.xex mw2/tu0/
+
+      - name: Restore the recompiled MP tree
+        id: ppc_cache
+        uses: actions/cache@v4
+        with:
+          path: |
+            ppc_mp_tu0
+            .xex-sha256
+          key: ppc-mp-tu0-${{ steps.fetch.outputs.assets_key }}-${{ hashFiles('build.sh', 'patches/**', 'config/MW2MP.tu0.toml', 'tools/genshared.py', 'tools/gen_kernel_stubs.py') }}
+
+      - name: Cache the XenonRecomp build
+        uses: actions/cache@v4
+        with:
+          path: XenonRecomp
+          key: xenonrecomp-${{ hashFiles('build.sh', 'patches/**') }}
+
+      - name: Recompile the MP executable (disc TU0)
+        if: steps.ppc_cache.outputs.cache-hit != 'true'
+        run: |
+          set -euo pipefail
+          VERSION=tu0 RECOMPILE_ONLY=1 TITLE=mp ISO=mw2/game.iso ./build.sh
+
+      - name: Note the executables' hashes and let go of the game files
+        run: |
+          set -euo pipefail
+          if [ -f mw2/default.xex ] && [ -f mw2/default_mp.xex ]; then
+            sp=$(sha256sum mw2/default.xex | cut -d' ' -f1)
+            mp=$(sha256sum mw2/default_mp.xex | cut -d' ' -f1)
+            printf '%s %s\n' "$sp" "$mp" > .xex-sha256
+          elif [ -f .xex-sha256 ]; then
+            read -r sp mp < .xex-sha256
+          else
+            echo "::error::The two executables are missing and no hashes were cached."
+            exit 1
+          fi
+          echo "MW2_XEX_SHA256_SP=$sp" >> "$GITHUB_ENV"
+          echo "MW2_XEX_SHA256_MP=$mp" >> "$GITHUB_ENV"
+          rm -rf mw2
+          df -h / | tail -1
+
+      - name: Restore the compiler cache
+        uses: actions/cache/restore@v4
+        id: ccache_restore
+        with:
+          path: .ccache
+          key: ccache-android-mp-${{ github.run_id }}
+          restore-keys: |
+            ccache-android-mp-
+            ccache-android-
+
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: "8.11.1"
+
+      - name: Build the multiplayer APK
+        working-directory: android
+        env:
+          MW2_NDK_VERSION: ${{ env.NDK_VERSION }}
+          MW2_BUILD_SHA: ${{ github.sha }}
+          MW2_NATIVE_OPTIMISATION: -O2
+          MW2_COMPILER_LAUNCHER: ccache
+        run: |
+          set -euo pipefail
+          export MW2_BUILD_SHA="${MW2_BUILD_SHA::7}"
+          export MW2_BUILD_STAMP="$(date -u '+%Y-%m-%d %H:%M') UTC, run ${{ github.run_number }}"
+          echo "building $MW2_BUILD_SHA ($MW2_BUILD_STAMP)"
+          gradle --no-daemon --stacktrace assembleMultiplayerRelease
+          ccache --show-stats || true
+
+      - name: Save the compiler cache
+        if: always()
+        uses: actions/cache/save@v4
+        with:
+          path: .ccache
+          key: ccache-android-mp-${{ github.run_id }}
+
+      - name: Collect the apk
+        run: |
+          set -euo pipefail
+          mkdir -p dist
+          stamp=$(date -u +%Y%m%d)
+          short=${GITHUB_SHA::7}
+          tools=$(ls -d "$ANDROID_HOME"/build-tools/* | sort -V | tail -1)
+          echo "::group::what Gradle produced"
+          find android/app/build/outputs/apk -name "*.apk" -printf "%s\t%p\n" | sort -k2 || true
+          echo "::endgroup::"
+          apk="android/app/build/outputs/apk/multiplayer/release/app-multiplayer-release.apk"
+          if [ ! -f "$apk" ]; then
+            echo "::error::$apk was not built. See the list above for what was."
+            exit 1
+          fi
+          if ! "$tools/apksigner" verify "$apk" > /dev/null 2>&1; then
+            echo "::error::$apk is not signed; Android would refuse it."
+            "$tools/apksigner" verify --verbose "$apk" || true
+            exit 1
+          fi
+          cp "$apk" "dist/mw2-multiplayer-android-arm64-$stamp-$short.apk"
+          (cd dist && sha256sum *.apk > SHA256SUMS.txt)
+          ls -la dist
+
+      - name: Verify the apk
+        run: |
+          set -euo pipefail
+          tools=$(ls -d "$ANDROID_HOME"/build-tools/* | sort -V | tail -1)
+          for apk in dist/*.apk; do
+            echo "::group::$apk"
+            ls -la "$apk"
+            unzip -t "$apk" > /dev/null && echo "zip: intact"
+            "$tools/apksigner" verify --verbose "$apk" || {
+              echo "::error::$apk is not correctly signed"
+              exit 1
+            }
+            "$tools/aapt2" dump badging "$apk" | grep -E "^package:|sdkVersion:|native-code:" || true
+            echo "::endgroup::"
+          done
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: android-mp-apk
+          path: dist/*
+          retention-days: 14
+          if-no-files-found: error
+          compression-level: 0
+
+      - name: Say what came out
+        run: |
+          {
+            echo "### MP build (disc TU0, LAN backend)"
+            echo
+            echo "build \`${GITHUB_SHA::7}\` (run ${{ github.run_number }})"
+            echo
+            echo '```'
+            cat dist/SHA256SUMS.txt
+            echo '```'
+            echo
+            echo "Install in com.mw2.recomp.mp from the FULL disc ISO (not lean)."
+          } >> "$GITHUB_STEP_SUMMARY"

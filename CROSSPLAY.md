@@ -70,10 +70,12 @@ recompiles and builds on a GitHub runner:
    zip those two files, upload the zip to a **private** location you control
    (unlisted Drive link, private Hugging Face repo, etc.).
 2. Push this branch to your fork.
-3. Actions → `android` → Run workflow:
-   - `archive_url`: your private zip link (or set `GAME_ARCHIVE_URL` secret),
-   - `title`: `both` (or `multiplayer` / `campaign`),
-   - `build_type`: `release`.
+3. Actions → **`Build MP APK`** → Run workflow (no inputs — it builds the
+   multiplayer flavor from `GAME_ARCHIVE_URL`, disc TU0, LAN backend).
+   For campaign-only, Actions → `Build Android APK` (triggered automatically
+   on push too, from the committed `ppc/` tree). The upstream `android`
+   workflow is kept for reference but is not registered by GitHub on this
+   fork.
 4. Download the signed APK artifact (`mw2-multiplayer-android-arm64-*.apk`,
    `mw2-campaign-android-arm64-*.apk`) + check `SHA256SUMS.txt`.
 5. Copy your **full** ISO to the phone's `Download` folder, install the MP
