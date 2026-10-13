@@ -170,6 +170,19 @@ class Prefs(context: Context) {
         get() = store.getBoolean(KEY_PREWARM_ALL, false)
         set(value) = store.edit().putBoolean(KEY_PREWARM_ALL, value).apply()
 
+    /**
+     * The name other network players see (MW2_NAME). Empty means the
+     * profile's name, which on a fresh phone is "Player 1".
+     */
+    var playerName: String
+        get() = store.getString(KEY_PLAYER_NAME, "") ?: ""
+        set(value) = store.edit().putString(KEY_PLAYER_NAME, value.take(15)).apply()
+
+    /** Accept LAN lobby invitations automatically (MW2_LAN_ACCEPT). */
+    var lanAccept: Boolean
+        get() = store.getBoolean(KEY_LAN_ACCEPT, false)
+        set(value) = store.edit().putBoolean(KEY_LAN_ACCEPT, value).apply()
+
     companion object {
         private const val KEY_RESOLUTION = "resolutionScale"
         private const val KEY_RENDER_SCALE = "renderScale"
@@ -195,5 +208,7 @@ class Prefs(context: Context) {
         private const val KEY_AUTO_LAUNCH = "autoLaunch"
         private const val KEY_PAD_WARNING = "seenPadWarning"
         private const val KEY_PREWARM_ALL = "prewarmAllShaders"
+        private const val KEY_PLAYER_NAME = "playerName"
+        private const val KEY_LAN_ACCEPT = "lanAccept"
     }
 }

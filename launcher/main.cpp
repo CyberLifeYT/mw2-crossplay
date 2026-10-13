@@ -850,7 +850,10 @@ namespace
             add(Action::PlayCampaign, "PLAY CAMPAIGN", installed && campaign, "CAMPAIGN",
                 play(campaign, kCampaign, "The campaign and Special Ops, alone or in split screen."));
             add(Action::PlayMultiplayer, "PLAY MULTIPLAYER", installed && multiplayer, "MULTIPLAYER",
-                play(multiplayer, kMultiplayer, "Multiplayer: split screen, system link and private matches."));
+                play(multiplayer, kMultiplayer, "Multiplayer: split screen, system link and private matches.\n\n"
+                     "Windows may ask to allow mw2-mp through the firewall on first launch: allow it, "
+                     "or no other machine can see or join this one (UDP). "
+                     "All players must be on the same network; a phone hotspot the PC joins is the most reliable."));
 
             // Until the game is whole, installing it is the next thing to do.
             auto install = [&] {

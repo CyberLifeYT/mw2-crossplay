@@ -86,6 +86,10 @@ namespace online
         virtual bool NextJoin(std::string& connect) { (void)connect; return false; }
         // The service's own way to pick friends to invite, if it has one.
         virtual void InviteFriends() {}
+        // Diagnostics for the app: how many other copies this one hears on
+        // the network right now. Zero while hosting alone is expected; zero
+        // with a friend hosting beside it means discovery is not arriving.
+        virtual size_t PeerCount() { return 0; }
 
         // Optional: Xbox LIVE parties and private matches. A service that says
         // yes here has the player signed in to Live, which opens the title's

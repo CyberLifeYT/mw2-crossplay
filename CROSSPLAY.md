@@ -162,6 +162,28 @@ VERSION=tu0 TITLE=sp ./build.sh
 - SP and MP installs are separate apps/dirs — install the full ISO in **both**
   the `.sp` and `.mp` apps if you play both on one phone.
 
+### When the other machine does not appear
+
+Discovery is one UDP broadcast a second; no heard broadcasts means an empty
+server list *and* dead invites — one failure, two symptoms. Check in order:
+
+1. **Same network.** Phone off mobile data, on the same WiFi as the PC.
+   Most reliable: phone hotspot, PC joins it. Guest WiFis and AP isolation
+   block phone↔PC traffic entirely.
+2. **Windows Firewall.** Allow `mw2-mp` on first launch (inbound UDP
+   3074) or no other machine can see or join the PC.
+3. **Look at the HUD/logs, not the list.** The MP app's HUD shows
+   `LAN: N` (copies heard). `game.log` says `lan as "name" at ip:port`,
+   `also announces to <subnet>` and `lan discovered "name" at ip:port`.
+   If the count stays 0 with a host beside it, broadcasts are being
+   filtered — go back to 1.
+4. **Names/invites (LIVE party).** Set a network name in Settings
+   (otherwise the phone is "Player 1"); turn on auto-accept, or accept from
+   the title screen. The pause menu's **Invite network players** invites
+   everyone heard. Fallback with no discovery at all: the host's `game.log`
+   prints the exact `connect …` line — the guest types it into the HUD
+   console.
+
 ## Troubleshooting
 
 - `vulkan: the device lacks dynamic rendering…` → stock driver is Vulkan 1.1

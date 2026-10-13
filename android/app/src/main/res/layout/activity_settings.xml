@@ -160,6 +160,42 @@
             android:layout_height="wrap_content"
             android:text="@string/gamepad_hint" />
 
+        <TextView
+            style="@style/SettingLabel"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="@string/player_name" />
+
+        <EditText
+            android:id="@+id/player_name"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:hint="@string/player_name"
+            android:inputType="text"
+            android:maxLength="15"
+            android:singleLine="true"
+            android:textColor="#E2E8F0"
+            android:textColorHint="#64748B" />
+
+        <TextView
+            style="@style/SettingHint"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="@string/player_name_hint" />
+
+        <androidx.appcompat.widget.SwitchCompat
+            android:id="@+id/lan_accept"
+            style="@style/SettingSwitch"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="@string/lan_accept" />
+
+        <TextView
+            style="@style/SettingHint"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="@string/lan_accept_hint" />
+
         <androidx.appcompat.widget.SwitchCompat
             android:id="@+id/vibration"
             style="@style/SettingSwitch"

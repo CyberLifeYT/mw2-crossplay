@@ -2,11 +2,13 @@ package com.mw2.recomp
 
 import android.os.Bundle
 import android.widget.Button
+import android.widget.EditText
 import android.widget.SeekBar
 import android.widget.TextView
 import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
 import androidx.appcompat.widget.SwitchCompat
+import androidx.core.widget.doAfterTextChanged
 import kotlin.math.roundToInt
 
 /**
@@ -87,6 +89,10 @@ class SettingsActivity : AppCompatActivity() {
         // ---- controls ----
         switch(R.id.touch, prefs.touchControls) { prefs.touchControls = it }
         switch(R.id.gamepad, prefs.gamepadEnabled) { prefs.gamepadEnabled = it }
+        switch(R.id.lan_accept, prefs.lanAccept) { prefs.lanAccept = it }
+        val playerName: EditText = findViewById(R.id.player_name)
+        playerName.setText(prefs.playerName)
+        playerName.doAfterTextChanged { prefs.playerName = it.toString() }
         switch(R.id.vibration, prefs.vibration) { prefs.vibration = it }
         switch(R.id.invert, prefs.invertLook) { prefs.invertLook = it }
 

@@ -265,10 +265,24 @@ class GameActivity : AppCompatActivity(), NativeListener {
                     String.format(Locale.US, "  •  ⚡ Shaders %d%% (%d/%d)", pct, warmupCompleted, warmupQueued)
                 } else ""
 
+                // Other copies heard on the network (multiplayer only). Zero
+                // with a friend hosting beside this phone means discovery is
+                // not arriving -- same WiFi, firewall, hotspot; see the guide.
+                val lanPeers = if (packageName.endsWith(".mp")) {
+                    try {
+                        NativeBridge.nativeLanPeers()
+                    } catch (_: Throwable) {
+                        0
+                    }
+                } else 0
+                val lanPart = if (packageName.endsWith(".mp")) {
+                    String.format(Locale.US, "  •  LAN: %d", lanPeers)
+                } else ""
+
                 statsText.text = String.format(
                     Locale.US,
-                    "%d FPS%s  •  CPU %s%s%s  •  Tex %dMB%s  [▼ HUD]",
-                    fps, ftPart, cpuStr, tempPart, ramPart, texMb, warmupPart
+                    "%d FPS%s  •  CPU %s%s%s  •  Tex %dMB%s%s  [▼ HUD]",
+                    fps, ftPart, cpuStr, tempPart, ramPart, texMb, warmupPart, lanPart
                 )
 
                 if (hudIsExpanded) {
@@ -309,6 +323,10 @@ class GameActivity : AppCompatActivity(), NativeListener {
                         append("MEMORY & VIEWPORT\n")
                         append("  App / System Total RAM: $ramStr\n")
                         append("  Internal Render: ${resW}×${resH}  •  Refresh: ${refreshHz().roundToInt()} Hz\n")
+                        if (packageName.endsWith(".mp")) {
+                            append("\nNETWORK\n")
+                            append("  Players heard on LAN: $lanPeers\n")
+                        }
                     }
                 }
             }
@@ -723,6 +741,11 @@ class GameActivity : AppCompatActivity(), NativeListener {
         NativeBridge.nativeSetOption("MW2_PIPELINE_CACHE", "${filesDir.absolutePath}/pipeline.cache")
         NativeBridge.nativeSetOption("MW2_SHADER_CACHE", shaderCacheFile.absolutePath)
 
+        // Identity on the network and lobby behaviour. Empty name means the
+        // profile's (fresh installs show "Player 1"); the accept flag lets a
+        // host's invitation join without asking.
+        NativeBridge.nativeSetOption("MW2_NAME", prefs.playerName)
+        NativeBridge.nativeSetOption("MW2_LAN_ACCEPT", if (prefs.lanAccept) "1" else "")
         NativeBridge.nativeLookSettings(
             prefs.lookSensitivityX, prefs.lookSensitivityY,
             prefs.lookSmoothing, prefs.invertLook, prefs.lookSaturation,
@@ -743,30 +766,39 @@ class GameActivity : AppCompatActivity(), NativeListener {
     // ---- the pause menu ----------------------------------------------------------
 
     private fun showMenu() {
-        val items = arrayOf(
-            getString(R.string.resume),
-            getString(R.string.edit_controls),
-            if (prefs.touchControls) getString(R.string.hide_touch_controls)
-            else getString(R.string.show_touch_controls),
-            if (prefs.gamepadEnabled) getString(R.string.disable_gamepad)
-            else getString(R.string.enable_gamepad),
-            if (prefs.showStats) getString(R.string.hide_stats) else getString(R.string.show_stats),
-            getString(R.string.quit),
+        // Built as a list: the invite entry only exists in the multiplayer
+        // app, so fixed indices would point at the wrong rows there.
+        val labels = mutableListOf(
+            getString(R.string.resume) to { _: android.content.DialogInterface -> },
+            getString(R.string.edit_controls) to { _: android.content.DialogInterface -> beginEditing() },
         )
+        if (packageName.endsWith(".mp")) {
+            labels.add(getString(R.string.invite_players) to { _: android.content.DialogInterface -> inviteNetworkPlayers() })
+        }
+        labels.add(getString(if (prefs.touchControls) R.string.hide_touch_controls else R.string.show_touch_controls) to { _: android.content.DialogInterface -> setTouchControls(!prefs.touchControls) })
+        labels.add(getString(if (prefs.gamepadEnabled) R.string.disable_gamepad else R.string.enable_gamepad) to { _: android.content.DialogInterface -> setGamepad(!prefs.gamepadEnabled) })
+        labels.add(getString(if (prefs.showStats) R.string.hide_stats else R.string.show_stats) to { _: android.content.DialogInterface -> setStats(!prefs.showStats) })
+        labels.add(getString(R.string.quit) to { _: android.content.DialogInterface -> confirmQuit() })
         AlertDialog.Builder(this)
             .setTitle(R.string.paused)
-            .setItems(items) { dialog, which ->
-                when (which) {
-                    0 -> dialog.dismiss()
-                    1 -> beginEditing()
-                    2 -> setTouchControls(!prefs.touchControls)
-                    3 -> setGamepad(!prefs.gamepadEnabled)
-                    4 -> setStats(!prefs.showStats)
-                    5 -> confirmQuit()
-                }
+            .setItems(labels.map { it.first }.toTypedArray()) { dialog, which ->
+                dialog.dismiss()
+                labels[which].second(dialog)
             }
             .setOnDismissListener { goFullscreen() }
             .show()
+    }
+
+    // The title lobby's "Invite friends" for the network: invites every
+    // player this copy hears. Nothing happens with nobody heard yet -- the
+    // HUD's LAN line says how many that is.
+    private fun inviteNetworkPlayers() {
+        if (NativeBridge.isLoaded()) {
+            try {
+                NativeBridge.nativeInviteFriends()
+            } catch (_: Throwable) {
+            }
+        }
     }
 
     private fun setTouchControls(on: Boolean) {

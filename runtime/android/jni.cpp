@@ -23,6 +23,7 @@
 #include "../gpu/vulkan/pipeline.h"
 #include "../gpu/vulkan/renderer_state.h"
 #include "../console.h"
+#include "../online/service.h"
 
 #include <android/native_window.h>
 #include <android/native_window_jni.h>
@@ -471,6 +472,21 @@ MW2_NATIVE(void, nativePadConnected)(JNIEnv*, jobject, jint user, jboolean conne
 MW2_NATIVE(void, nativePadEnabled)(JNIEnv*, jobject, jboolean enabled)
 {
     android::input::SetHardwarePadEnabled(enabled == JNI_TRUE);
+}
+
+// The title's lobby "Invite friends" from the pause menu: invites every
+// player this copy hears on the network (lan.cpp). Silent when there is no
+// service or nobody to invite to anything yet.
+MW2_NATIVE(void, nativeInviteFriends)(JNIEnv*, jobject)
+{
+    if (auto* service = online::Get()) service->InviteFriends();
+}
+
+// How many other copies this one hears, for the HUD's network line.
+MW2_NATIVE(jint, nativeLanPeers)(JNIEnv*, jobject)
+{
+    if (auto* service = online::Get()) return jint(service->PeerCount());
+    return 0;
 }
 
 // ---- installing ------------------------------------------------------------

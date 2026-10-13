@@ -29,6 +29,7 @@
 #include <random>
 #include <string>
 #include <vector>
+#include <algorithm>
 #include <cstdlib>
 
 #ifdef _WIN32
@@ -140,8 +141,11 @@ namespace
     }
 
     // The network connections that are up, the loopback aside, in the order
-    // the system lists them.
-    struct Adapter { std::string name; uint32_t address; };
+    // the system lists them. On Android the WiFi interfaces come first: the
+    // system lists cellular (rmnet) before wlan, and announcing a cellular
+    // address, or broadcasting by the default route, would send discovery to
+    // the carrier where it dies instead of to the LAN the players share.
+    struct Adapter { std::string name; uint32_t address; uint32_t netmask; };
     std::vector<Adapter> Adapters()
     {
         std::vector<Adapter> found;
@@ -166,8 +170,10 @@ namespace
             for (auto* unicast = at->FirstUnicastAddress; unicast; unicast = unicast->Next)
             {
                 const auto* address = reinterpret_cast<const sockaddr_in*>(unicast->Address.lpSockaddr);
-                if (address->sin_family == AF_INET)
-                    found.push_back({ name, ntohl(address->sin_addr.s_addr) });
+                if (address->sin_family != AF_INET) continue;
+                const ULONG prefix = unicast->OnLinkPrefixLength > 32 ? 32 : unicast->OnLinkPrefixLength;
+                const uint32_t mask = prefix == 0 ? 0 : (0xFFFFFFFFu << (32 - prefix));
+                found.push_back({ name, ntohl(address->sin_addr.s_addr), mask });
             }
         }
 #else
@@ -177,9 +183,17 @@ namespace
         {
             if (!at->ifa_addr || at->ifa_addr->sa_family != AF_INET) continue;
             if (!(at->ifa_flags & IFF_UP) || (at->ifa_flags & IFF_LOOPBACK)) continue;
-            found.push_back({ at->ifa_name, ntohl(reinterpret_cast<sockaddr_in*>(at->ifa_addr)->sin_addr.s_addr) });
+            uint32_t mask = 0;
+            if (at->ifa_netmask && at->ifa_netmask->sa_family == AF_INET)
+                mask = ntohl(reinterpret_cast<sockaddr_in*>(at->ifa_netmask)->sin_addr.s_addr);
+            found.push_back({ at->ifa_name, ntohl(reinterpret_cast<sockaddr_in*>(at->ifa_addr)->sin_addr.s_addr), mask });
         }
         freeifaddrs(list);
+#ifdef MW2_ANDROID
+        std::stable_partition(found.begin(), found.end(), [](const Adapter& a) {
+            return a.name.compare(0, 4, "wlan") == 0;
+        });
+#endif
 #endif
         return found;
     }
@@ -270,6 +284,33 @@ namespace
             inet_ntop(AF_INET, &bound.sin_addr, text, sizeof text);
             LOGI("online: lan as \"%s\" at %s:%u, broadcasts on %u", name_.c_str(), text,
                  ntohs(bound.sin_port), sharedPort_);
+            // Discovery also goes to every connected subnet's broadcast
+            // address: a limited broadcast (255.255.255.255) is filtered on
+            // some routers and hotspots, while the subnet's own still passes.
+            {
+                std::string subnets;
+                for (const Adapter& adapter : Adapters())
+                {
+                    if (adapter.netmask == 0 || adapter.netmask == 0xFFFFFFFFu) continue;
+                    const uint32_t target = adapter.address | ~adapter.netmask;
+                    if (target == adapter.address || target == INADDR_BROADCAST) continue;
+                    sockaddr_in to{};
+                    to.sin_family = AF_INET;
+                    to.sin_addr.s_addr = htonl(target);
+                    to.sin_port = htons(sharedPort_);
+                    bool dup = false;
+                    for (const sockaddr_in& have : broadcasts_)
+                        dup = dup || have.sin_addr.s_addr == to.sin_addr.s_addr;
+                    if (dup) continue;
+                    broadcasts_.push_back(to);
+                    in_addr bcast;
+                    bcast.s_addr = to.sin_addr.s_addr;
+                    char btext[INET_ADDRSTRLEN];
+                    inet_ntop(AF_INET, &bcast, btext, sizeof btext);
+                    subnets += (subnets.empty() ? "" : ", ") + std::string(btext);
+                }
+                if (!subnets.empty()) LOGI("online: lan also announces to %s", subnets.c_str());
+            }
             return true;
         }
 
@@ -292,7 +333,10 @@ namespace
             everyone.sin_family = AF_INET;
             everyone.sin_addr.s_addr = htonl(INADDR_BROADCAST);
             everyone.sin_port = htons(sharedPort_);
-            return SendTo(everyone, fromPort, toPort, bytes, size);
+            bool ok = SendTo(everyone, fromPort, toPort, bytes, size);
+            for (const sockaddr_in& subnet : broadcasts_)
+                ok = SendTo(subnet, fromPort, toPort, bytes, size) && ok;
+            return ok;
         }
 
         bool Receive(uint16_t port, online::Datagram& out) override
@@ -309,6 +353,13 @@ namespace
 
         bool Lobbies() override { return true; }
 
+        // Diagnostics for the app's HUD: how many copies this one hears.
+        size_t PeerCount() override
+        {
+            std::lock_guard g(lock_);
+            return peers_.size();
+        }
+
         void SetJoinable(const online::Joinable* joinable) override
         {
             std::lock_guard g(lock_);
@@ -324,6 +375,11 @@ namespace
             Drain(shared_);
             const auto now = std::chrono::steady_clock::now();
             if (now - announced_ >= kAnnounceEvery) AnnounceLocked();
+            if (peers_.size() != loggedPeers_)
+            {
+                loggedPeers_ = peers_.size();
+                LOGI("online: lan sees %zu player(s) on the network", loggedPeers_);
+            }
             if (!join_.empty())
             {
                 auto it = peers_.find(join_);
@@ -385,13 +441,22 @@ namespace
             everyone.sin_addr.s_addr = htonl(INADDR_BROADCAST);
             everyone.sin_port = htons(sharedPort_);
             SendDatagram(own_, &presence, sizeof presence, everyone);
+            for (const sockaddr_in& subnet : broadcasts_)
+                SendDatagram(own_, &presence, sizeof presence, subnet);
         }
 
         void Heard(const sockaddr_in& from, const Presence& presence)
         {
             if (presence.instance == instance_) return;
             const std::string name(presence.name, strnlen(presence.name, sizeof presence.name));
+            const bool fresh = peers_.find(name) == peers_.end();
             Peer& peer = peers_[name];
+            if (fresh)
+            {
+                char text[INET_ADDRSTRLEN];
+                inet_ntop(AF_INET, &from.sin_addr, text, sizeof text);
+                LOGI("online: lan discovered \"%s\" at %s:%u", name.c_str(), text, ntohs(from.sin_port));
+            }
             peer.id = IdOf(from);
             peer.account = BigEndian64(presence.account);
             if (peer.account == Account() && !warned_)
@@ -470,6 +535,8 @@ namespace
         std::map<uint16_t, std::deque<online::Datagram>> waiting_;
 
         std::map<std::string, Peer> peers_;   // by name
+        size_t loggedPeers_ = 0;              // last count told to the log
+        std::vector<sockaddr_in> broadcasts_; // subnet broadcasts, beside 255.255.255.255
         bool hasJoinable_ = false;
         online::Joinable joinable_;
         std::chrono::steady_clock::time_point announced_{};

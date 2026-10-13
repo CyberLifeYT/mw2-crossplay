@@ -112,6 +112,12 @@ object NativeBridge {
     external fun nativePadConnected(user: Int, connected: Boolean)
     external fun nativePadEnabled(enabled: Boolean)
 
+    /** Invite every network player heard to this player's lobby, if any. */
+    external fun nativeInviteFriends()
+
+    /** Other copies heard on the network right now (0 when offline/alone). */
+    external fun nativeLanPeers(): Int
+
     // ---- the graphics driver ----------------------------------------------
 
     /** An unpacked driver folder and the library inside it, or "" for the system's. */
