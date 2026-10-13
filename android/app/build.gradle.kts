@@ -48,7 +48,10 @@ android {
         // there is no device with the memory to run this anyway.
         minSdk = 26
         targetSdk = 35
-        versionCode = 1
+        // Bump EVERY published release: Android refuses to install an update
+        // whose versionCode is at or below the installed one. CI may set
+        // MW2_VERSION_CODE instead of editing this file.
+        versionCode = setting("MW2_VERSION_CODE")?.toIntOrNull() ?: 2
         // Which build this is, carried inside the apk. "The wrong apk" has
         // cost more than one evening, and every time the only way to settle
         // it was to guess. The launcher shows this and Android's app info

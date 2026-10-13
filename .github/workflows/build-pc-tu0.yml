@@ -1,0 +1,299 @@
+# Builds the PC player release for this fork: disc TU0 + LAN, the combination
+# Android crossplay needs (the Android build is TU0-only, and a TU6 PC build
+# would not interoperate with it). No Steam backend: system-link over LAN.
+#
+# Needs the same two secrets as Build MP APK (both masked in logs):
+#   GAME_ARCHIVE_URL  PLAIN raw URL of the zip with default.xex + default_mp.xex
+#   MW2_ASSETS_TOKEN  fine-grained PAT, Contents read-only on the assets repo
+# mw2/ is removed after the build so no game file can reach an artifact.
+#
+# First run is long (two recompiles + two full builds); ppc_tu0/ppc_mp_tu0,
+# XenonRecomp and ccache are cached, so re-running after a timeout resumes.
+name: Build PC TU0
+
+on:
+  workflow_dispatch:
+    inputs:
+      release_tag:
+        description: "Release tag to stamp into the launcher/updater"
+        default: "v0.1.0-alpha.2"
+      upload_release:
+        description: "Attach the archives to that GitHub Release"
+        type: boolean
+        default: true
+
+permissions:
+  contents: write
+
+env:
+  CCACHE_DIR: ${{ github.workspace }}/.ccache
+  CCACHE_BASEDIR: ${{ github.workspace }}
+  CCACHE_MAXSIZE: 6G
+  CCACHE_COMPILERCHECK: content
+
+jobs:
+  linux:
+    # Ubuntu 22.04 so the binaries ask for glibc 2.35 at most.
+    runs-on: ubuntu-22.04
+    timeout-minutes: 330
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Make room on the disk
+        run: |
+          echo "before:"; df -h / | tail -1
+          sudo rm -rf /usr/share/dotnet /opt/ghc /usr/local/share/boost /usr/share/swift || true
+          sudo apt-get clean
+          echo "after:"; df -h / | tail -1
+
+      - name: Install the toolchains and libraries
+        run: |
+          wget -qO llvm.sh https://apt.llvm.org/llvm.sh
+          sudo bash llvm.sh 18
+          sudo add-apt-repository -y ppa:ubuntu-toolchain-r/test
+          # SDL3's video, audio, input and dialog backends, and the Vulkan loader.
+          sudo apt-get update
+          sudo apt-get install -y libstdc++-13-dev ninja-build ccache pkg-config \
+            libx11-dev libxext-dev libxrandr-dev libxcursor-dev libxfixes-dev libxi-dev \
+            libxss-dev libxtst-dev libxkbcommon-dev libwayland-dev libdecor-0-dev \
+            libegl1-mesa-dev libgl1-mesa-dev libgles2-mesa-dev libdrm-dev libgbm-dev \
+            libasound2-dev libpulse-dev libpipewire-0.3-dev \
+            libdbus-1-dev libibus-1.0-dev libudev-dev libvulkan-dev python3
+          # Ubuntu 22.04's Vulkan headers predate extensions the renderer asks for.
+          git clone -q --depth 1 --branch v1.3.275 https://github.com/KhronosGroup/Vulkan-Headers.git
+          cmake -S Vulkan-Headers -B Vulkan-Headers/build -G Ninja
+          sudo cmake --install Vulkan-Headers/build
+          rm -rf Vulkan-Headers llvm.sh
+
+      - name: Fetch the game's executables
+        id: fetch
+        env:
+          ARCHIVE_URL: ${{ secrets.GAME_ARCHIVE_URL }}
+          MW2_ASSETS_TOKEN: ${{ secrets.MW2_ASSETS_TOKEN }}
+          HTTP_AUTHORIZATION: Bearer ${{ secrets.MW2_ASSETS_TOKEN }}
+        run: |
+          set -euo pipefail
+          if [ -z "$ARCHIVE_URL" ]; then
+            echo "::error::GAME_ARCHIVE_URL secret is empty. See CROSSPLAY.md."
+            exit 1
+          fi
+          if [ -z "${MW2_ASSETS_TOKEN:-}" ]; then
+            echo "::error::MW2_ASSETS_TOKEN secret is empty. See CROSSPLAY.md."
+            exit 1
+          fi
+          case "$ARCHIVE_URL" in
+            *@*) echo "::error::GAME_ARCHIVE_URL must be the PLAIN raw URL; the token goes in MW2_ASSETS_TOKEN."; exit 1 ;;
+          esac
+          echo "::add-mask::$ARCHIVE_URL"
+          python3 tools/fetch_asset.py --into mw2 --github-output \
+            --require default.xex,default_mp.xex "$ARCHIVE_URL"
+          mkdir -p mw2/tu0
+          cp mw2/default.xex mw2/default_mp.xex mw2/tu0/
+
+      - name: Restore the recompiled trees (disc TU0)
+        id: ppc_cache
+        uses: actions/cache@v4
+        with:
+          path: |
+            ppc_tu0
+            ppc_mp_tu0
+            .xex-sha256
+          key: ppc-tu0-${{ steps.fetch.outputs.assets_key }}-${{ hashFiles('build.sh', 'patches/**', 'config/MW2.tu0.toml', 'config/MW2MP.tu0.toml', 'tools/genshared.py', 'tools/gen_kernel_stubs.py') }}
+
+      - name: Cache the XenonRecomp build
+        uses: actions/cache@v4
+        with:
+          path: XenonRecomp
+          key: xenonrecomp-${{ hashFiles('build.sh', 'patches/**') }}
+
+      - name: Recompile both executables (disc TU0)
+        if: steps.ppc_cache.outputs.cache-hit != 'true'
+        run: |
+          set -euo pipefail
+          VERSION=tu0 RECOMPILE_ONLY=1 TITLE=sp ISO=mw2/game.iso ./build.sh
+          VERSION=tu0 RECOMPILE_ONLY=1 TITLE=mp ISO=mw2/game.iso ./build.sh
+
+      - name: Restore the compiler cache
+        uses: actions/cache/restore@v4
+        with:
+          path: .ccache
+          key: ccache-pc-linux-${{ github.run_id }}
+          restore-keys: |
+            ccache-pc-linux-
+
+      - name: Build (sp offline, mp lan)
+        run: |
+          export CMAKE_EXTRA="-DCMAKE_C_COMPILER_LAUNCHER=ccache -DCMAKE_CXX_COMPILER_LAUNCHER=ccache -DFETCHCONTENT_BASE_DIR=$PWD/out/_deps"
+          VERSION=tu0 TITLE=sp ONLINE=none RELEASE=1 RELEASE_TAG=${{ inputs.release_tag }} BUILD_DIR=out/sp ./build.sh
+          VERSION=tu0 TITLE=mp ONLINE=lan RELEASE=1 RELEASE_TAG=${{ inputs.release_tag }} BUILD_DIR=out/mp ./build.sh
+          ccache --show-stats || true
+
+      - name: Save the compiler cache
+        if: always()
+        uses: actions/cache/save@v4
+        with:
+          path: .ccache
+          key: ccache-pc-linux-${{ github.run_id }}
+
+      - name: Package
+        run: |
+          set -euo pipefail
+          rm -rf mw2
+          mkdir -p dist
+          name=mw2-${{ inputs.release_tag }}-linux-tu0-lan
+          mkdir -p $name
+          cp out/sp/mw2 $name/mw2-sp
+          cp out/mp/mw2 $name/mw2-mp
+          cp out/sp/mw2-launcher $name/mw2-launcher
+          strip $name/mw2-sp $name/mw2-mp $name/mw2-launcher
+          cp README.md CROSSPLAY.md LICENSE $name/
+          cp third_party/fonts/OFL.txt $name/FONT-LICENSE.txt
+          tar czf dist/$name.tar.gz $name
+          echo "glibc needed: $(objdump -T out/mp/mw2 | grep -oE 'GLIBC_[0-9.]+' | sort -Vu | tail -1)"
+          ls -la dist
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: pc-linux-tu0
+          path: dist/*
+          retention-days: 14
+          if-no-files-found: error
+          compression-level: 0
+
+      - name: Upload to release
+        if: ${{ github.event.inputs.upload_release == true || github.event.inputs.upload_release == 'true' }}
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          for f in dist/*; do
+            gh release upload "${{ inputs.release_tag }}" "$f" --clobber -R "${{ github.repository }}" || echo "upload skipped for $f"
+          done
+
+  windows:
+    # Cross-compiled on Linux with llvm-mingw.
+    runs-on: ubuntu-24.04
+    timeout-minutes: 330
+    env:
+      LLVM_MINGW_RELEASE: "20260922"
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Make room on the disk
+        run: |
+          echo "before:"; df -h / | tail -1
+          sudo rm -rf /usr/share/dotnet /opt/ghc /usr/local/share/boost /usr/share/swift || true
+          sudo apt-get clean
+          echo "after:"; df -h / | tail -1
+
+      - name: Install the toolchains
+        run: |
+          sudo apt-get update
+          # clang-18 builds XenonRecomp, which runs here; llvm-mingw builds the game.
+          sudo apt-get install -y clang-18 lld-18 ninja-build ccache zip python3
+          name=llvm-mingw-$LLVM_MINGW_RELEASE-ucrt-ubuntu-22.04-x86_64
+          wget -q https://github.com/mstorsjo/llvm-mingw/releases/download/$LLVM_MINGW_RELEASE/$name.tar.xz
+          tar xf $name.tar.xz -C $HOME && rm $name.tar.xz
+          echo "LLVM_MINGW=$HOME/$name" >> "$GITHUB_ENV"
+
+      - name: Fetch the game's executables
+        id: fetch
+        env:
+          ARCHIVE_URL: ${{ secrets.GAME_ARCHIVE_URL }}
+          MW2_ASSETS_TOKEN: ${{ secrets.MW2_ASSETS_TOKEN }}
+          HTTP_AUTHORIZATION: Bearer ${{ secrets.MW2_ASSETS_TOKEN }}
+        run: |
+          set -euo pipefail
+          if [ -z "$ARCHIVE_URL" ]; then
+            echo "::error::GAME_ARCHIVE_URL secret is empty. See CROSSPLAY.md."
+            exit 1
+          fi
+          if [ -z "${MW2_ASSETS_TOKEN:-}" ]; then
+            echo "::error::MW2_ASSETS_TOKEN secret is empty. See CROSSPLAY.md."
+            exit 1
+          fi
+          case "$ARCHIVE_URL" in
+            *@*) echo "::error::GAME_ARCHIVE_URL must be the PLAIN raw URL; the token goes in MW2_ASSETS_TOKEN."; exit 1 ;;
+          esac
+          echo "::add-mask::$ARCHIVE_URL"
+          python3 tools/fetch_asset.py --into mw2 --github-output \
+            --require default.xex,default_mp.xex "$ARCHIVE_URL"
+          mkdir -p mw2/tu0
+          cp mw2/default.xex mw2/default_mp.xex mw2/tu0/
+
+      - name: Restore the recompiled trees (disc TU0)
+        id: ppc_cache
+        uses: actions/cache@v4
+        with:
+          path: |
+            ppc_tu0
+            ppc_mp_tu0
+            .xex-sha256
+          key: ppc-tu0-${{ steps.fetch.outputs.assets_key }}-${{ hashFiles('build.sh', 'patches/**', 'config/MW2.tu0.toml', 'config/MW2MP.tu0.toml', 'tools/genshared.py', 'tools/gen_kernel_stubs.py') }}
+
+      - name: Cache the XenonRecomp build
+        uses: actions/cache@v4
+        with:
+          path: XenonRecomp
+          key: xenonrecomp-${{ hashFiles('build.sh', 'patches/**') }}
+
+      - name: Recompile both executables (disc TU0)
+        if: steps.ppc_cache.outputs.cache-hit != 'true'
+        run: |
+          set -euo pipefail
+          VERSION=tu0 RECOMPILE_ONLY=1 TITLE=sp ISO=mw2/game.iso ./build.sh
+          VERSION=tu0 RECOMPILE_ONLY=1 TITLE=mp ISO=mw2/game.iso ./build.sh
+
+      - name: Restore the compiler cache
+        uses: actions/cache/restore@v4
+        with:
+          path: .ccache
+          key: ccache-pc-windows-${{ github.run_id }}
+          restore-keys: |
+            ccache-pc-windows-
+
+      - name: Build (sp offline, mp lan)
+        run: |
+          export CMAKE_EXTRA="-DCMAKE_C_COMPILER_LAUNCHER=ccache -DCMAKE_CXX_COMPILER_LAUNCHER=ccache -DFETCHCONTENT_BASE_DIR=$PWD/out/_deps"
+          WINDOWS=1 VERSION=tu0 TITLE=sp ONLINE=none RELEASE=1 RELEASE_TAG=${{ inputs.release_tag }} BUILD_DIR=out/sp ./build.sh
+          WINDOWS=1 VERSION=tu0 TITLE=mp ONLINE=lan RELEASE=1 RELEASE_TAG=${{ inputs.release_tag }} BUILD_DIR=out/mp ./build.sh
+          ccache --show-stats || true
+
+      - name: Save the compiler cache
+        if: always()
+        uses: actions/cache/save@v4
+        with:
+          path: .ccache
+          key: ccache-pc-windows-${{ github.run_id }}
+
+      - name: Package
+        run: |
+          set -euo pipefail
+          rm -rf mw2
+          mkdir -p dist
+          name=mw2-${{ inputs.release_tag }}-windows-tu0-lan
+          mkdir -p $name
+          cp out/sp/mw2.exe $name/mw2-sp.exe
+          cp out/mp/mw2.exe $name/mw2-mp.exe
+          cp out/sp/mw2-launcher.exe $name/mw2-launcher.exe
+          $LLVM_MINGW/bin/llvm-strip $name/mw2-sp.exe $name/mw2-mp.exe $name/mw2-launcher.exe
+          cp README.md CROSSPLAY.md LICENSE $name/
+          cp third_party/fonts/OFL.txt $name/FONT-LICENSE.txt
+          zip -qr dist/$name.zip $name
+          ls -la dist
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: pc-windows-tu0
+          path: dist/*
+          retention-days: 14
+          if-no-files-found: error
+          compression-level: 0
+
+      - name: Upload to release
+        if: ${{ github.event.inputs.upload_release == true || github.event.inputs.upload_release == 'true' }}
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          for f in dist/*; do
+            gh release upload "${{ inputs.release_tag }}" "$f" --clobber -R "${{ github.repository }}" || echo "upload skipped for $f"
+          done

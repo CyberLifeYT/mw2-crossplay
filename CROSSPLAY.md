@@ -75,6 +75,10 @@ recompiles and builds on a GitHub runner:
    - `MW2_ASSETS_TOKEN` = fine-grained PAT, **Contents read-only** on the
      assets repo only. Sent as an `Authorization` header — never embed tokens
      in the URL (URL parsers choke on them and they leak into request lines).
+3. Android `versionCode` (`android/app/build.gradle.kts`) **must go up with
+   every published release** (currently 2, or set `MW2_VERSION_CODE` in CI) —
+   Android will not install an update over an APK with an equal or higher
+   code. Both flavors share the number (they are separate packages).
 2. Push this branch to your fork.
 3. Actions → **`Build MP APK`** → Run workflow (no inputs — it builds the
    multiplayer flavor from `GAME_ARCHIVE_URL`, disc TU0, LAN backend).
