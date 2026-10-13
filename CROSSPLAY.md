@@ -96,6 +96,25 @@ Every update ships through CI; skip only components whose code did not change:
    ends of a match must run the same alpha. Say so in the notes when it
    changes (unchanged since alpha.6).
 
+## Title update 6 (TU6) and mods
+
+The disc version (TU0) above is what Android and crossplay use. Mods such as
+Bot Warfare need **TU6** instead:
+
+- The TU6 package (`TU_10LC20N_…`, 2 patches + 3 fastfiles) lives in the
+  **private** assets repo under `title-updates/TU6/` — same place CI reads
+  it from. Never publish it.
+- PC TU6 builds come from the `Build PC TU6` workflow (sp offline + mp lan,
+  stamped with the release tag). **TU6 plays only with TU6** — not with TU0
+  copies on PC or phones.
+- The PC launcher installs/updates TU6 itself: point it at your ISO and it
+  downloads nothing (the package rides with the build's installer flow).
+- Loading a mod: drop its `.ff` files into the installed `game/` folder
+  beside the others — the engine reads that one flat directory, so a mod
+  fastfile with the right name just loads. Keep the originals aside.
+- Android stays TU0 for now: a TU6 phone build needs its own recompile +
+  on-device update application, which is a separate piece of work.
+
 ## Shader seed (refreshing the bundled cache)
 
 The APK ships `android/app/src/main/assets/shader_cache.bin`; at first
