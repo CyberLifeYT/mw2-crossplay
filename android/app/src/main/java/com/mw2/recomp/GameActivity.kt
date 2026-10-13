@@ -728,15 +728,12 @@ class GameActivity : AppCompatActivity(), NativeListener {
             } else if (legacyShaders.exists() && legacyShaders.length() > 0) {
                 legacyShaders.copyTo(shaderCacheFile, overwrite = true)
             } else {
-                try {
-                    assets.open("shader_cache.bin").use { input ->
-                        shaderCacheFile.outputStream().use { output ->
-                            input.copyTo(output)
-                        }
-                    }
-                    android.util.Log.i("MW2", "Unpacked bundled shader_cache.bin from assets to ${shaderCacheFile.absolutePath}")
-                } catch (_: Exception) {}
+                adoptRicherSeed(shaderCacheFile)
             }
+        } else {
+            // A fuller bundled seed replaces a thinner installed cache, so a
+            // recorded playthrough shipped in the APK actually reaches play.
+            adoptRicherSeed(shaderCacheFile)
         }
         NativeBridge.nativeSetOption("MW2_PIPELINE_CACHE", "${filesDir.absolutePath}/pipeline.cache")
         NativeBridge.nativeSetOption("MW2_SHADER_CACHE", shaderCacheFile.absolutePath)
@@ -751,6 +748,55 @@ class GameActivity : AppCompatActivity(), NativeListener {
             prefs.lookSmoothing, prefs.invertLook, prefs.lookSaturation,
         )
         NativeBridge.nativePadEnabled(prefs.gamepadEnabled)
+    }
+
+    private data class SeedCounts(val magic: Int, val version: Int, val shaders: Int, val pipelines: Int)
+
+    private fun readSeedCounts(stream: java.io.InputStream): SeedCounts? = try {
+        stream.use {
+            val head = ByteArray(16)
+            var read = 0
+            while (read < 16) {
+                val n = it.read(head, read, 16 - read)
+                if (n <= 0) break
+                read += n
+            }
+            if (read < 16) null
+            else {
+                val words = java.nio.ByteBuffer.wrap(head).order(java.nio.ByteOrder.LITTLE_ENDIAN).asIntBuffer()
+                SeedCounts(words[0], words[1], words[2], words[3])
+            }
+        }
+    } catch (_: Exception) {
+        null
+    }
+
+    // The APK ships a recorded seed; a fuller one wins over a thinner
+    // installed cache, whichever side it came from. Headers compared, never
+    // trusted blindly; a foreign or corrupt file is left alone.
+    private fun adoptRicherSeed(target: File) {
+        val seed = try {
+            readSeedCounts(assets.open("shader_cache.bin"))
+        } catch (_: Exception) {
+            null
+        } ?: return
+        val have = if (target.exists() && target.length() >= 16) {
+            try {
+                readSeedCounts(target.inputStream())
+            } catch (_: Exception) {
+                null
+            }
+        } else null
+        val take = have == null ||
+            (seed.magic == have.magic && seed.version == have.version && seed.pipelines > have.pipelines)
+        if (!take) return
+        try {
+            assets.open("shader_cache.bin").use { input ->
+                target.outputStream().use { output -> input.copyTo(output) }
+            }
+            android.util.Log.i("MW2", "Shader seed: bundled ${seed.pipelines} pipelines replaces ${have?.pipelines ?: 0}")
+        } catch (_: Exception) {
+        }
     }
 
     private fun applyDriver() {

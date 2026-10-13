@@ -494,7 +494,13 @@ namespace
             if (best) std::memcpy(id.data(), best->info.sessionId, 8);
             if (id == g_joinable) return;
             g_joinable = id;
-            if (best) std::memcpy(joinable.session, &best->info, sizeof best->info);
+            if (best)
+            {
+                std::memcpy(joinable.session, &best->info, sizeof best->info);
+                joinable.publicSlots = best->publicSlots;
+                joinable.privateSlots = best->privateSlots;
+                std::memcpy(joinable.nonce, best->nonce, sizeof joinable.nonce);
+            }
         }
         if (best)
         {

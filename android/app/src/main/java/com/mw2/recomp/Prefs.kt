@@ -143,6 +143,11 @@ class Prefs(context: Context) {
         get() = store.getString(KEY_LAST_BROWSED, "") ?: ""
         set(value) = store.edit().putString(KEY_LAST_BROWSED, value).apply()
 
+    /** The update this phone was told about and skipped, by tag. */
+    var seenUpdateTag: String
+        get() = store.getString(KEY_UPDATE_TAG, "") ?: ""
+        set(value) = store.edit().putString(KEY_UPDATE_TAG, value).apply()
+
     /** Shown once, the first time the player opens the app. */
     var seenWelcome: Boolean
         get() = store.getBoolean(KEY_WELCOME, false)
@@ -206,6 +211,7 @@ class Prefs(context: Context) {
         private const val KEY_LAST_BROWSED = "lastBrowsed"
         private const val KEY_WELCOME = "seenWelcome"
         private const val KEY_AUTO_LAUNCH = "autoLaunch"
+        private const val KEY_UPDATE_TAG = "seenUpdateTag"
         private const val KEY_PAD_WARNING = "seenPadWarning"
         private const val KEY_PREWARM_ALL = "prewarmAllShaders"
         private const val KEY_PLAYER_NAME = "playerName"

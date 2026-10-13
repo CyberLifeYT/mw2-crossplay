@@ -29,11 +29,14 @@ namespace online
     };
 
     // A session a friend can join, opaque to the service: the console's
-    // XSESSION_INFO (session id, host address, key), 60 bytes.
+    // XSESSION_INFO (session id, host address, key), 60 bytes, plus the
+    // slots and nonce the title's `connect` line carries beside them.
     constexpr size_t kSessionInfoSize = 60;
     struct Joinable
     {
         uint8_t session[kSessionInfoSize]{};
+        uint8_t publicSlots = 0, privateSlots = 0;
+        uint8_t nonce[8]{};
     };
 
     struct Invite

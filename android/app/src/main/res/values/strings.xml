@@ -114,6 +114,12 @@
     <string name="invite_players">Invite network players</string>
     <string name="lan_peers">LAN players: %1$d</string>
 
+    <!-- self-update -->
+    <string name="update_title">Update available: %1$s</string>
+    <string name="update_message">This install is build %1$d, the release carries build %2$d.\n\nOpen the release page and install the APK over this one — no uninstall, no data loss.</string>
+    <string name="update_download">Open release page</string>
+    <string name="skip_version">Skip this version</string>
+
     <!-- in the game -->
     <string name="menu">Menu</string>
     <string name="paused">Paused</string>

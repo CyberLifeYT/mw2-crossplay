@@ -101,7 +101,9 @@ namespace
     constexpr uint32_t kMagic = 0x4D57324C;   // "MW2L"
 
     // Who a copy is and what can be joined: to everyone as presence, or to one
-    // player as an invitation.
+    // player as an invitation. Slots and nonce travel too, so a system-link
+    // invitation carries everything the title's own `connect` line needs
+    // (XNADDR, key, id, slots, nonce) and can join without the Live path.
     struct Presence
     {
         uint32_t magic;
@@ -112,6 +114,9 @@ namespace
         uint64_t account;      // big-endian
         char name[32];
         uint8_t session[online::kSessionInfoSize];
+        uint8_t publicSlots;
+        uint8_t privateSlots;
+        uint8_t nonce[8];
     };
     constexpr uint32_t kPresenceMagic = 0x4D573250;   // "MW2P"
     constexpr uint8_t kAnnounce = 0, kInvite = 1;
@@ -122,6 +127,8 @@ namespace
         uint64_t id = 0, account = 0;
         bool joinable = false;
         uint8_t session[online::kSessionInfoSize]{};
+        uint8_t publicSlots = 0, privateSlots = 0;
+        uint8_t nonce[8]{};
     };
     constexpr size_t kLargest = 64 * 1024;
     constexpr size_t kQueued = 512;
@@ -130,6 +137,35 @@ namespace
     {
         return (uint64_t(ntohl(address.sin_addr.s_addr)) << 16) | ntohs(address.sin_port);
     }
+
+    // The title's own `connect` line for a heard system-link session, in the
+    // exact form its server browser issues (xam.cpp's AdvertiseHosted): the
+    // guest then joins the way picking the server would, with no Live
+    // sign-in or accept flag needed.
+    std::string HexBytes(const uint8_t* p, size_t n)
+    {
+        static const char* digits = "0123456789abcdef";
+        std::string text;
+        text.reserve(2 * n);
+        for (size_t i = 0; i < n; i++)
+        {
+            text += digits[p[i] >> 4];
+            text += digits[p[i] & 15];
+        }
+        return text;
+    }
+
+    std::string ConnectLine(const Peer& peer)
+    {
+        return "connect " + HexBytes(peer.session + 8, 36) + " " +
+               HexBytes(peer.session + 44, 16) + " " + HexBytes(peer.session, 8) + " " +
+               std::to_string(peer.publicSlots) + " " + std::to_string(peer.privateSlots) + " " +
+               HexBytes(peer.nonce, 8);
+    }
+
+    // A Live session id carries 0x80 in its top bits; a system-link one does
+    // not. Only the wire format both ends of this build speak is trusted.
+    bool IsLiveSession(const Peer& peer) { return (peer.session[0] & 0x80) != 0; }
 
     sockaddr_in AddressOf(uint64_t id)
     {
@@ -386,13 +422,27 @@ namespace
                 if (it != peers_.end() && it->second.joinable)
                 {
                     LOGI("online: lan joins %s", join_.c_str());
-                    invites_.push_back(InviteFrom(it->second, false));
+                    if (!IsLiveSession(it->second))
+                        joins_.push_back(ConnectLine(it->second));
+                    else
+                        invites_.push_back(InviteFrom(it->second, false));
                     join_.clear();
                 }
             }
             if (invites_.empty()) return false;
             out = invites_.front();
             invites_.pop_front();
+            return true;
+        }
+
+        // System-link joins queued above, as the title's own `connect` lines.
+        // service.cpp types the system-link menu first, then the line.
+        bool NextJoin(std::string& connect) override
+        {
+            std::lock_guard g(lock_);
+            if (joins_.empty()) return false;
+            connect = std::move(joins_.front());
+            joins_.pop_front();
             return true;
         }
 
@@ -428,7 +478,13 @@ namespace
             presence.joinable = hasJoinable_;
             presence.account = BigEndian64(Account());
             std::snprintf(presence.name, sizeof presence.name, "%s", name_.c_str());
-            if (hasJoinable_) std::memcpy(presence.session, joinable_.session, sizeof presence.session);
+            if (hasJoinable_)
+            {
+                std::memcpy(presence.session, joinable_.session, sizeof presence.session);
+                presence.publicSlots = joinable_.publicSlots;
+                presence.privateSlots = joinable_.privateSlots;
+                std::memcpy(presence.nonce, joinable_.nonce, sizeof presence.nonce);
+            }
             return presence;
         }
 
@@ -459,6 +515,9 @@ namespace
             }
             peer.id = IdOf(from);
             peer.account = BigEndian64(presence.account);
+            peer.publicSlots = presence.publicSlots;
+            peer.privateSlots = presence.privateSlots;
+            std::memcpy(peer.nonce, presence.nonce, sizeof peer.nonce);
             if (peer.account == Account() && !warned_)
             {
                 warned_ = true;
@@ -468,6 +527,16 @@ namespace
             peer.joinable = presence.joinable;
             std::memcpy(peer.session, presence.session, sizeof peer.session);
             if (presence.kind != kInvite || !peer.joinable) return;
+            // A system-link invitation joins straight through the title's own
+            // `connect` line -- the way picking the server would -- with no
+            // Live sign-in or accept flag needed. A Live one keeps the
+            // invitation path below, which the title answers in its Live menu.
+            if (!IsLiveSession(peer))
+            {
+                LOGI("online: joining %s's system-link game directly", name.c_str());
+                joins_.push_back(ConnectLine(peer));
+                return;
+            }
             if (accept_)
             {
                 LOGI("online: lan accepts %s's invitation", name.c_str());
@@ -542,7 +611,8 @@ namespace
         std::chrono::steady_clock::time_point announced_{};
         std::string join_;                     // MW2_LAN_JOIN, until joined
         bool accept_ = false;                  // MW2_LAN_ACCEPT
-        std::deque<online::Invite> invites_;
+        std::deque<online::Invite> invites_;   // Live invitations, accepted above
+        std::deque<std::string> joins_;        // system-link `connect` lines, typed by Frame
     };
 }
 

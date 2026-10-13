@@ -1,6 +1,8 @@
 package com.mw2.recomp
 
 import android.content.Intent
+import android.net.Uri
+import android.os.Build
 import android.os.Bundle
 import android.view.InputDevice
 import android.widget.Button
@@ -9,6 +11,10 @@ import android.widget.TextView
 import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
 import java.io.File
+import java.net.HttpURLConnection
+import java.net.URL
+import kotlin.concurrent.thread
+import org.json.JSONArray
 
 /**
  * The launcher: is the game installed, which driver will be used, and the
@@ -103,6 +109,7 @@ class MainActivity : AppCompatActivity() {
             }
         }
         Trail.clear(this)
+        checkForUpdates()
     }
 
     override fun onResume() {
@@ -270,6 +277,61 @@ class MainActivity : AppCompatActivity() {
                 prefs.seenPadWarning = true
                 GameActivity.start(this)
             }
+            .show()
+    }
+
+    /** A newer published APK, if there is one: silent when offline. */
+    private fun checkForUpdates() {
+        thread(name = "update-check", isDaemon = true) {
+            try {
+                val connection = (URL("https://api.github.com/repos/CyberLifeYT/mw2-crossplay/releases?per_page=10")
+                    .openConnection() as HttpURLConnection).apply {
+                    connectTimeout = 15000
+                    readTimeout = 15000
+                    setRequestProperty("Accept", "application/vnd.github+json")
+                }
+                if (connection.responseCode != 200) return@thread
+                val releases = JSONArray(connection.inputStream.bufferedReader().readText())
+                val want = if (packageName.endsWith(".mp")) "multiplayer" else "campaign"
+                for (i in 0 until releases.length()) {
+                    val release = releases.getJSONObject(i)
+                    if (release.optBoolean("draft")) continue
+                    val assets = release.optJSONArray("assets") ?: continue
+                    val matches = (0 until assets.length()).any {
+                        assets.getJSONObject(it).optString("name").contains(want, ignoreCase = true)
+                    }
+                    if (!matches) continue
+                    val tag = release.optString("tag_name")
+                    val code = Regex("APK versionCode:\\s*(\\d+)")
+                        .find(release.optString("body"))?.groupValues?.get(1)?.toIntOrNull() ?: 0
+                    val installed = packageManager.getPackageInfo(packageName, 0).let {
+                        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) it.longVersionCode.toInt()
+                        else it.versionCode
+                    }
+                    // Newest matching release only: older ones stay buried.
+                    if (code > installed && tag.isNotEmpty() && tag != prefs.seenUpdateTag) {
+                        val page = release.optString("html_url")
+                        runOnUiThread { showUpdateDialog(tag, page, installed, code) }
+                    }
+                    return@thread
+                }
+            } catch (_: Throwable) {
+            }
+        }
+    }
+
+    private fun showUpdateDialog(tag: String, page: String, installed: Int, code: Int) {
+        AlertDialog.Builder(this)
+            .setTitle(getString(R.string.update_title, tag))
+            .setMessage(getString(R.string.update_message, installed, code))
+            .setPositiveButton(R.string.update_download) { _, _ ->
+                try {
+                    startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(page)))
+                } catch (_: Throwable) {
+                }
+            }
+            .setNeutralButton(R.string.skip_version) { _, _ -> prefs.seenUpdateTag = tag }
+            .setNegativeButton(R.string.cancel, null)
             .show()
     }
 
