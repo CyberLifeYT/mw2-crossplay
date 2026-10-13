@@ -93,6 +93,12 @@ namespace online
         // the network right now. Zero while hosting alone is expected; zero
         // with a friend hosting beside it means discovery is not arriving.
         virtual size_t PeerCount() { return 0; }
+        // Joinable peers' names, one per line, for a picker UI.
+        virtual std::string PeerNames() { return {}; }
+        // Join a heard peer by name (an explicit tap, so no accept flag is
+        // needed): system-link sessions through the `connect` line, Live ones
+        // through the invitation path. False when nobody by that name is heard.
+        virtual bool JoinPeer(const std::string& name) { (void)name; return false; }
 
         // Optional: Xbox LIVE parties and private matches. A service that says
         // yes here has the player signed in to Live, which opens the title's

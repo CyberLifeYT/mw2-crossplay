@@ -112,6 +112,13 @@
     <string name="lan_accept">Accept network invites automatically</string>
     <string name="lan_accept_hint">When another player on the network invites this phone to their lobby, join without asking. Off means invites are only logged.</string>
     <string name="invite_players">Invite network players</string>
+    <string name="join_game">Join network game</string>
+    <string name="no_peers">Nobody heard on the network yet — host a lobby on the other machine first, on the same WiFi.</string>
+    <string name="max_rank">Max rank 70</string>
+    <string name="unlock_all">Unlock everything</string>
+    <string name="prestige_up">Prestige +1</string>
+    <string name="cheats_done">%1$s: %2$d file(s) changed. Restart the match to play on them.</string>
+    <string name="cheats_failed">Cheat failed: %1$s</string>
     <string name="lan_peers">LAN players: %1$d</string>
 
     <!-- self-update -->

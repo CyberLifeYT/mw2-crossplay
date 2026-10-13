@@ -489,6 +489,23 @@ MW2_NATIVE(jint, nativeLanPeers)(JNIEnv*, jobject)
     return 0;
 }
 
+// Joinable peers' names, one per line, for the join picker.
+MW2_NATIVE(jstring, nativeLanPeerNames)(JNIEnv* env, jobject)
+{
+    std::string names;
+    if (auto* service = online::Get()) names = service->PeerNames();
+    return FromString(env, names);
+}
+
+// Join a heard peer right now (an explicit tap: no accept flag needed).
+MW2_NATIVE(jboolean, nativeLanJoinPeer)(JNIEnv* env, jobject, jstring name)
+{
+    const std::string peer = ToString(env, name);
+    if (peer.empty()) return JNI_FALSE;
+    if (auto* service = online::Get()) return service->JoinPeer(peer) ? JNI_TRUE : JNI_FALSE;
+    return JNI_FALSE;
+}
+
 // ---- installing ------------------------------------------------------------
 
 MW2_NATIVE(jboolean, nativeGameInstalled)(JNIEnv* env, jobject, jstring gameDirectory)

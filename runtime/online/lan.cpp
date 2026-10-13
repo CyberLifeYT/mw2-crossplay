@@ -396,6 +396,34 @@ namespace
             return peers_.size();
         }
 
+        std::string PeerNames() override
+        {
+            std::lock_guard g(lock_);
+            std::string names;
+            for (const auto& [name, peer] : peers_)
+                if (peer.joinable) { names += name; names += '\n'; }
+            return names;
+        }
+
+        bool JoinPeer(const std::string& name) override
+        {
+            std::lock_guard g(lock_);
+            auto it = peers_.find(name);
+            if (it == peers_.end() || !it->second.joinable) return false;
+            Peer& peer = it->second;
+            if (!IsLiveSession(peer))
+            {
+                LOGI("online: joining %s's system-link game directly", name.c_str());
+                joins_.push_back(ConnectLine(peer));
+            }
+            else
+            {
+                LOGI("online: accepting %s's invitation", name.c_str());
+                invites_.push_back(InviteFrom(peer, true));
+            }
+            return true;
+        }
+
         void SetJoinable(const online::Joinable* joinable) override
         {
             std::lock_guard g(lock_);

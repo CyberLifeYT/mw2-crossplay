@@ -820,6 +820,10 @@ class GameActivity : AppCompatActivity(), NativeListener {
         )
         if (packageName.endsWith(".mp")) {
             labels.add(getString(R.string.invite_players) to { _: android.content.DialogInterface -> inviteNetworkPlayers() })
+            labels.add(getString(R.string.join_game) to { _: android.content.DialogInterface -> pickNetworkPeer() })
+            labels.add(getString(R.string.max_rank) to { _: android.content.DialogInterface -> runCheat(R.string.max_rank, Cheats::maxRank) })
+            labels.add(getString(R.string.unlock_all) to { _: android.content.DialogInterface -> runCheat(R.string.unlock_all, Cheats::unlockEverything) })
+            labels.add(getString(R.string.prestige_up) to { _: android.content.DialogInterface -> runCheat(R.string.prestige_up, Cheats::prestigeUp) })
         }
         labels.add(getString(if (prefs.touchControls) R.string.hide_touch_controls else R.string.show_touch_controls) to { _: android.content.DialogInterface -> setTouchControls(!prefs.touchControls) })
         labels.add(getString(if (prefs.gamepadEnabled) R.string.disable_gamepad else R.string.enable_gamepad) to { _: android.content.DialogInterface -> setGamepad(!prefs.gamepadEnabled) })
@@ -845,6 +849,62 @@ class GameActivity : AppCompatActivity(), NativeListener {
             } catch (_: Throwable) {
             }
         }
+    }
+
+    // Join a heard host right now, re-firing the join even if the automatic
+    // one raced the menu and was swallowed.
+    private fun pickNetworkPeer() {
+        val names = try {
+            NativeBridge.nativeLanPeerNames().split("\n").filter { it.isNotBlank() }
+        } catch (_: Throwable) {
+            emptyList()
+        }
+        if (names.isEmpty()) {
+            AlertDialog.Builder(this)
+                .setMessage(R.string.no_peers)
+                .setPositiveButton(R.string.close, null)
+                .setOnDismissListener { goFullscreen() }
+                .show()
+            return
+        }
+        AlertDialog.Builder(this)
+            .setTitle(R.string.join_game)
+            .setItems(names.toTypedArray()) { dialog, which ->
+                dialog.dismiss()
+                try {
+                    NativeBridge.nativeLanJoinPeer(names[which])
+                } catch (_: Throwable) {
+                }
+                goFullscreen()
+            }
+            .setOnDismissListener { goFullscreen() }
+            .show()
+    }
+
+    private fun savesDir(): java.io.File {
+        val gameDir = prefs.gameDirectory.ifEmpty {
+            (getExternalFilesDir(null) ?: filesDir).absolutePath + "/game"
+        }
+        return java.io.File(java.io.File(gameDir).parent ?: filesDir.absolutePath, "saves")
+    }
+
+    private fun runCheat(label: Int, cheat: (java.io.File) -> Int) {
+        Thread {
+            val text = try {
+                val n = cheat(savesDir())
+                getString(R.string.cheats_done, getString(label), n)
+            } catch (e: Throwable) {
+                getString(R.string.cheats_failed, e.message ?: "")
+            }
+            handler.post {
+                AlertDialog.Builder(this)
+                    .setTitle(label)
+                    .setMessage(text)
+                    .setPositiveButton(R.string.close, null)
+                    .setOnDismissListener { goFullscreen() }
+                    .show()
+            }
+        }.start()
     }
 
     private fun setTouchControls(on: Boolean) {

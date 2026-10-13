@@ -118,6 +118,12 @@ object NativeBridge {
     /** Other copies heard on the network right now (0 when offline/alone). */
     external fun nativeLanPeers(): Int
 
+    /** Joinable peers' names, one per line. */
+    external fun nativeLanPeerNames(): String
+
+    /** Join a heard peer now. False when nobody by that name is heard. */
+    external fun nativeLanJoinPeer(name: String): Boolean
+
     // ---- the graphics driver ----------------------------------------------
 
     /** An unpacked driver folder and the library inside it, or "" for the system's. */
