@@ -67,8 +67,14 @@ recompiles and builds on a GitHub runner:
 1. Zip **only the two executables** (NOT the ISO — ~10 MB, not ~8 GB):
    extract `default.xex` + `default_mp.xex` from your ISO
    (`python tools/xdvdfs.py "<your.iso>" mw2/tu0 default.xex default_mp.xex`),
-   zip those two files, upload the zip to a **private** location you control
-   (unlisted Drive link, private Hugging Face repo, etc.).
+   zip those two files, push the zip to a **private** assets repo.
+2. Two Actions secrets in the public repo (Settings → Secrets → Actions),
+   both auto-masked in logs:
+   - `GAME_ARCHIVE_URL` = the **plain** raw URL, no credentials:
+     `https://raw.githubusercontent.com/<you>/mw2-assets/main/mw2-xex-tu0.zip`
+   - `MW2_ASSETS_TOKEN` = fine-grained PAT, **Contents read-only** on the
+     assets repo only. Sent as an `Authorization` header — never embed tokens
+     in the URL (URL parsers choke on them and they leak into request lines).
 2. Push this branch to your fork.
 3. Actions → **`Build MP APK`** → Run workflow (no inputs — it builds the
    multiplayer flavor from `GAME_ARCHIVE_URL`, disc TU0, LAN backend).

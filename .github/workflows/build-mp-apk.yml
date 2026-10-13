@@ -5,9 +5,12 @@
 # committed -- then builds the multiplayer flavor
 # (-DMW2_TITLE=mp -DMW2_ONLINE=lan, see android/app/build.gradle.kts).
 #
-# Needs one secret:
-#   GAME_ARCHIVE_URL  a zip holding default.xex + default_mp.xex (disc TU0),
-#                     e.g. https://x-access-token:<ro-token>@raw.githubusercontent.com/<you>/mw2-assets/main/mw2-xex-tu0.zip
+# Needs two secrets (both masked in logs):
+#   GAME_ARCHIVE_URL  PLAIN raw URL, no credentials, e.g.
+#                     https://raw.githubusercontent.com/<you>/mw2-assets/main/mw2-xex-tu0.zip
+#   MW2_ASSETS_TOKEN  fine-grained PAT with Contents read-only on the assets
+#                     repo; sent as an Authorization header (fetch_asset.py
+#                     reads HTTP_AUTHORIZATION). Never embed it in the URL.
 # The URL is masked in logs, and mw2/ is deleted off the runner before the
 # APK is built, so no game file can end up in an artifact.
 #
@@ -73,13 +76,23 @@ jobs:
       - name: Fetch the game's executables
         id: fetch
         env:
+          # Plain URL, NO credentials in it (they break URL parsing and leak).
+          # The token travels as an Authorization header instead.
           ARCHIVE_URL: ${{ secrets.GAME_ARCHIVE_URL }}
+          HTTP_AUTHORIZATION: Bearer ${{ secrets.MW2_ASSETS_TOKEN }}
         run: |
           set -euo pipefail
           if [ -z "$ARCHIVE_URL" ]; then
             echo "::error::GAME_ARCHIVE_URL secret is empty. See CROSSPLAY.md."
             exit 1
           fi
+          if [ -z "${MW2_ASSETS_TOKEN:-}" ]; then
+            echo "::error::MW2_ASSETS_TOKEN secret is empty (fine-grained PAT, Contents read on the assets repo). See CROSSPLAY.md."
+            exit 1
+          fi
+          case "$ARCHIVE_URL" in
+            *@*) echo "::error::GAME_ARCHIVE_URL must be the PLAIN raw URL without credentials; the token goes in MW2_ASSETS_TOKEN."; exit 1 ;;
+          esac
           echo "::add-mask::$ARCHIVE_URL"
           python3 tools/fetch_asset.py --into mw2 --github-output \
             --require default.xex,default_mp.xex "$ARCHIVE_URL"
