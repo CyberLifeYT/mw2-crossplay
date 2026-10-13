@@ -156,14 +156,17 @@ if [ "${REGENERATE:-1}" = 0 ] && [ -f $PPC/ppc_func_mapping.cpp ]; then
 echo "==> 5-7. keeping the recompiled tree in $PPC/"
 else
 echo "==> 5. detect jump tables"
-./XenonRecomp/build/XenonAnalyse/XenonAnalyse $MW2/$XEX $TABLES
+# The analyser's own log is kept beside the build: tools/fixbounds.py derives
+# explicit function bounds for its jump-table errors from it (and the PE).
+./XenonRecomp/build/XenonAnalyse/XenonAnalyse $MW2/$XEX $TABLES >"$ROOT/logs-analyse-$TITLE-$VERSION.txt" 2>&1 || {
+    echo "    XenonAnalyse failed:"; tail -20 "$ROOT/logs-analyse-$TITLE-$VERSION.txt"; exit 1; }
 echo "    tables: $(grep -c '^\[\[switch\]\]' $TABLES)"
 
 echo "==> 6. recompile PPC -> C++"
 rm -rf $PPC && mkdir -p $PPC
-( cd config && ../XenonRecomp/build/XenonRecomp/XenonRecomp $TOML ../XenonRecomp/XenonUtils/ppc_context.h ) | tee /tmp/mw2_recomp.log | tail -1
-echo "    unrecognized instructions: $(grep -c 'Unrecognized instruction' /tmp/mw2_recomp.log || true)"
-echo "    switch-case errors:        $(grep -c 'trying to jump outside function' /tmp/mw2_recomp.log || true)"
+( cd config && ../XenonRecomp/build/XenonRecomp/XenonRecomp $TOML ../XenonRecomp/XenonUtils/ppc_context.h ) 2>&1 | tee "$ROOT/logs-recomp-$TITLE-$VERSION.txt" | tail -1
+echo "    unrecognized instructions: $(grep -c 'Unrecognized instruction' "$ROOT/logs-recomp-$TITLE-$VERSION.txt" || true)"
+echo "    switch-case errors:        $(grep -c 'trying to jump outside function' "$ROOT/logs-recomp-$TITLE-$VERSION.txt" || true)"
 
 echo "==> 7. generate declarations + kernel import stubs (into $PPC/)"
 python3 tools/genshared.py

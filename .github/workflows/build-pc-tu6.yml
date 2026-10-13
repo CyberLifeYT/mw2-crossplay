@@ -135,6 +135,26 @@ jobs:
           VERSION=tu6 TU=$PWD/tu6.pkg TITLE=mp ONLINE=lan RELEASE=1 RELEASE_TAG=${{ inputs.release_tag }} BUILD_DIR=out/mp ./build.sh
           ccache --show-stats || true
 
+      - name: Derive jump-table bounds from the failure
+        # tools/fixbounds.py reads the analyser's errors, the switch tables
+        # and the PE -- all still in the workspace on a failed build -- and
+        # prints the config/*.toml entries that fix them. Addresses only, no
+        # game data, so the output is safe to read in the log.
+        if: failure()
+        run: |
+          for title in sp mp; do
+            case "$title" in
+              sp) tables=config/mw2_switch_tables.toml ;;
+              mp) tables=config/mw2mp_switch_tables.toml ;;
+            esac
+            echo "===== $title ($tables) ====="
+            if [ -f "$tables" ] && [ -f "logs-analyse-$title-tu6.txt" ]; then
+              MW2_TITLE=$title MW2_VERSION=tu6 python3 tools/fixbounds.py "$tables" "logs-analyse-$title-tu6.txt" || true
+            else
+              echo "missing inputs, skipping"
+            fi
+          done
+
       - name: Save the compiler cache
         if: always()
         uses: actions/cache/save@v4
@@ -270,6 +290,26 @@ jobs:
           WINDOWS=1 VERSION=tu6 TU=$PWD/tu6.pkg TITLE=sp ONLINE=none RELEASE=1 RELEASE_TAG=${{ inputs.release_tag }} BUILD_DIR=out/sp ./build.sh
           WINDOWS=1 VERSION=tu6 TU=$PWD/tu6.pkg TITLE=mp ONLINE=lan RELEASE=1 RELEASE_TAG=${{ inputs.release_tag }} BUILD_DIR=out/mp ./build.sh
           ccache --show-stats || true
+
+      - name: Derive jump-table bounds from the failure
+        # tools/fixbounds.py reads the analyser's errors, the switch tables
+        # and the PE -- all still in the workspace on a failed build -- and
+        # prints the config/*.toml entries that fix them. Addresses only, no
+        # game data, so the output is safe to read in the log.
+        if: failure()
+        run: |
+          for title in sp mp; do
+            case "$title" in
+              sp) tables=config/mw2_switch_tables.toml ;;
+              mp) tables=config/mw2mp_switch_tables.toml ;;
+            esac
+            echo "===== $title ($tables) ====="
+            if [ -f "$tables" ] && [ -f "logs-analyse-$title-tu6.txt" ]; then
+              MW2_TITLE=$title MW2_VERSION=tu6 python3 tools/fixbounds.py "$tables" "logs-analyse-$title-tu6.txt" || true
+            else
+              echo "missing inputs, skipping"
+            fi
+          done
 
       - name: Save the compiler cache
         if: always()
