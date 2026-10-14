@@ -130,9 +130,10 @@ jobs:
 
       - name: Build (sp offline, mp lan)
         run: |
+          set -euo pipefail
           export CMAKE_EXTRA="-DCMAKE_C_COMPILER_LAUNCHER=ccache -DCMAKE_CXX_COMPILER_LAUNCHER=ccache -DFETCHCONTENT_BASE_DIR=$PWD/out/_deps"
-          VERSION=tu6 TU=$PWD/tu6.pkg TITLE=sp ONLINE=none RELEASE=1 RELEASE_TAG=${{ inputs.release_tag }} BUILD_DIR=out/sp ./build.sh
-          VERSION=tu6 TU=$PWD/tu6.pkg TITLE=mp ONLINE=lan RELEASE=1 RELEASE_TAG=${{ inputs.release_tag }} BUILD_DIR=out/mp ./build.sh
+          VERSION=tu6 TU=$PWD/tu6.pkg TITLE=sp ONLINE=none RELEASE=1 RELEASE_TAG=${{ inputs.release_tag }} BUILD_DIR=out/sp ./build.sh 2>&1 | tee logs-build-sp-tu6.txt
+          VERSION=tu6 TU=$PWD/tu6.pkg TITLE=mp ONLINE=lan RELEASE=1 RELEASE_TAG=${{ inputs.release_tag }} BUILD_DIR=out/mp ./build.sh 2>&1 | tee logs-build-mp-tu6.txt
           ccache --show-stats || true
 
       - name: Derive jump-table bounds from the failure
@@ -172,7 +173,7 @@ jobs:
           # and the addresses around the label place its true bounds
           # (config/*.toml `functions`). Addresses only, no game data.
           for title in sp mp; do
-            log="logs-recomp-$title-tu6.txt"
+            log="logs-build-$title-tu6.txt"
             [ -f "$log" ] || continue
             labels=$(grep -o "loc_[0-9A-Fa-f]*" "$log" 2>/dev/null | sort -u | sed 's/^loc_/0x/' || true)
             if [ -n "$labels" ]; then
@@ -313,9 +314,10 @@ jobs:
 
       - name: Build (sp offline, mp lan)
         run: |
+          set -euo pipefail
           export CMAKE_EXTRA="-DCMAKE_C_COMPILER_LAUNCHER=ccache -DCMAKE_CXX_COMPILER_LAUNCHER=ccache -DFETCHCONTENT_BASE_DIR=$PWD/out/_deps"
-          WINDOWS=1 VERSION=tu6 TU=$PWD/tu6.pkg TITLE=sp ONLINE=none RELEASE=1 RELEASE_TAG=${{ inputs.release_tag }} BUILD_DIR=out/sp ./build.sh
-          WINDOWS=1 VERSION=tu6 TU=$PWD/tu6.pkg TITLE=mp ONLINE=lan RELEASE=1 RELEASE_TAG=${{ inputs.release_tag }} BUILD_DIR=out/mp ./build.sh
+          WINDOWS=1 VERSION=tu6 TU=$PWD/tu6.pkg TITLE=sp ONLINE=none RELEASE=1 RELEASE_TAG=${{ inputs.release_tag }} BUILD_DIR=out/sp ./build.sh 2>&1 | tee logs-build-sp-tu6.txt
+          WINDOWS=1 VERSION=tu6 TU=$PWD/tu6.pkg TITLE=mp ONLINE=lan RELEASE=1 RELEASE_TAG=${{ inputs.release_tag }} BUILD_DIR=out/mp ./build.sh 2>&1 | tee logs-build-mp-tu6.txt
           ccache --show-stats || true
 
       - name: Derive jump-table bounds from the failure
@@ -355,7 +357,7 @@ jobs:
           # and the addresses around the label place its true bounds
           # (config/*.toml `functions`). Addresses only, no game data.
           for title in sp mp; do
-            log="logs-recomp-$title-tu6.txt"
+            log="logs-build-$title-tu6.txt"
             [ -f "$log" ] || continue
             labels=$(grep -o "loc_[0-9A-Fa-f]*" "$log" 2>/dev/null | sort -u | sed 's/^loc_/0x/' || true)
             if [ -n "$labels" ]; then
