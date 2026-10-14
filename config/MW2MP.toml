@@ -62,4 +62,20 @@ functions = [
     { address = 0x8230CBE8, size = 0x1E0 },
     { address = 0x8230FFB8, size = 0x1B0 },
     { address = 0x823FEA58, size = 0x14C },
+    # Unreferenced leaf functions the analyser never starts (no .pdata, no bl
+    # into them, no padding between them), called through a table at boot by
+    # the code after 0x823AAC20. The device log shows each as "inside the code
+    # range but not identified as a function start", then the title bugchecks
+    # (black screen). Each runs to the next called address; the last of each
+    # group runs to its .pdata end. Extents from tools/bracket.py --flow on a
+    # TU6 MP recompile (Build MP APK probe).
+    { address = 0x8242C630, size = 0x20 },
+    { address = 0x8242C650, size = 0x38 },
+    { address = 0x8242C688, size = 0x24 },
+    { address = 0x8242C6E0, size = 0x18 },
+    { address = 0x8242C6F8, size = 0x38 },
+    { address = 0x8242C730, size = 0x20 },
+    { address = 0x8242C750, size = 0x180 },
+    { address = 0x8242BB48, size = 0x38 },
+    { address = 0x8242BB80, size = 0x44 },
 ]
