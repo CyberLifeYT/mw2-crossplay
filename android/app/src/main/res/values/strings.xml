@@ -106,6 +106,11 @@
     <string name="storage_line">%1$s: %2$s</string>
     <string name="clear_shaders">Clear shader cache</string>
     <string name="clear_logs">Clear logs</string>
+    <string name="install_mods">Install mod files</string>
+    <string name="install_mods_hint">Extra maps, weapons and modes for this install's game version. Choose the extracted folder: its .ff, .pak and .bik files are copied into the game folder. Scripts and plugins are reported and left alone — this port runs no plugin system.</string>
+    <string name="mods_installed">Installed %1$d file(s) into the game folder.%2$s</string>
+    <string name="mods_skipped">\n\nSkipped:\n%1$s</string>
+    <string name="mods_nothing">That folder holds nothing to install: no .ff, .pak or .bik files.</string>
     <string name="shaders_cleared">Shader cache cleared. Shaders rebuild as you play.</string>
     <string name="logs_cleared">Logs cleared.</string>
     <string name="paths_line">Installed in:\n%1$s</string>

@@ -1,14 +1,18 @@
 package com.mw2.recomp
 
+import android.app.Activity
+import android.content.Intent
 import android.os.Bundle
 import android.widget.Button
 import android.widget.EditText
 import android.widget.SeekBar
 import android.widget.TextView
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
 import androidx.appcompat.widget.SwitchCompat
 import androidx.core.widget.doAfterTextChanged
+import java.io.File
 import kotlin.math.roundToInt
 
 /**
@@ -19,6 +23,15 @@ import kotlin.math.roundToInt
 class SettingsActivity : AppCompatActivity() {
 
     private lateinit var prefs: Prefs
+
+    private val modBrowse = registerForActivityResult(
+        ActivityResultContracts.StartActivityForResult(),
+    ) { result ->
+        if (result.resultCode != Activity.RESULT_OK) return@registerForActivityResult
+        val path = result.data?.getStringExtra(FileBrowserActivity.EXTRA_PATH)
+            ?: return@registerForActivityResult
+        installModFolder(File(path))
+    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -155,6 +168,73 @@ class SettingsActivity : AppCompatActivity() {
             storage.text = getString(R.string.logs_cleared)
             refreshStorage(storage)
         }
+        findViewById<Button>(R.id.install_mods).setOnClickListener {
+            modBrowse.launch(Intent(this, FileBrowserActivity::class.java))
+        }
+    }
+
+    /** Extra maps/weapons/modes from an extracted mod folder into game/. */
+    private fun installModFolder(folder: File) {
+        Thread {
+            val text = try {
+                val gameDir = prefs.gameDirectory.ifEmpty {
+                    (getExternalFilesDir(null) ?: filesDir).absolutePath + "/game"
+                }
+                val game = File(gameDir)
+                if (!folder.isDirectory) throw IllegalStateException(folder.name)
+                game.mkdirs()
+                val copied = mutableListOf<String>()
+                val skipped = mutableListOf<String>()
+                folder.listFiles()
+                    ?.sortedBy { it.name.lowercase() }
+                    ?.forEach { file ->
+                        if (!file.isFile) return@forEach
+                        val lower = file.name.lowercase()
+                        val loadable = lower.endsWith(".ff") || lower.endsWith(".pak") || lower.endsWith(".bik")
+                        if (!loadable) {
+                            val why =
+                                if (lower.endsWith(".xex") || lower.endsWith(".exe") ||
+                                    lower.endsWith(".dll") || lower.endsWith(".so")
+                                ) "executables are never taken from a mod"
+                                else "needs the CoD Xe plugin, which this port does not run"
+                            skipped.add("${file.name} ($why)")
+                            return@forEach
+                        }
+                        val to = File(game, file.name)
+                        if (to.isFile && to.length() == file.length()) return@forEach
+                        val part = File(game, file.name + ".part")
+                        try {
+                            file.inputStream().use { input ->
+                                part.outputStream().use { output -> input.copyTo(output) }
+                            }
+                            if (!part.renameTo(to)) throw IllegalStateException("write failed")
+                            copied.add(file.name)
+                        } catch (_: Throwable) {
+                            try {
+                                part.delete()
+                            } catch (_: Throwable) {
+                            }
+                            skipped.add("${file.name} (could not be written)")
+                        }
+                    }
+                if (copied.isEmpty() && skipped.isEmpty()) getString(R.string.mods_nothing)
+                else getString(
+                    R.string.mods_installed, copied.size,
+                    if (skipped.isEmpty()) "" else getString(
+                        R.string.mods_skipped, skipped.joinToString("\n"),
+                    ),
+                ) + if (copied.isNotEmpty()) "\n\n" + copied.joinToString("\n") else ""
+            } catch (e: Throwable) {
+                getString(R.string.install_failed, e.message ?: "")
+            }
+            runOnUiThread {
+                AlertDialog.Builder(this)
+                    .setTitle(R.string.install_mods)
+                    .setMessage(text)
+                    .setPositiveButton(R.string.close, null)
+                    .show()
+            }
+        }.start()
     }
 
     private fun gameBase(): java.io.File = getExternalFilesDir(null) ?: filesDir
@@ -168,8 +248,7 @@ class SettingsActivity : AppCompatActivity() {
         )
     }
 
-    private fun refreshStorage(view: TextView) {
-        view.text = getString(R.string.storage_computing)
+    private fun refreshStorage(view: TextView) {        view.text = getString(R.string.storage_computing)
         Thread {
             fun sizeOf(dir: java.io.File): Long = try {
                 if (dir.isFile) dir.length()

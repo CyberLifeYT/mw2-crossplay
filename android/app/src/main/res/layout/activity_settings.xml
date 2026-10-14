@@ -326,5 +326,18 @@
             android:layout_height="wrap_content"
             android:layout_marginTop="10dp"
             android:text="@string/clear_logs" />
+
+        <Button
+            android:id="@+id/install_mods"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="10dp"
+            android:text="@string/install_mods" />
+
+        <TextView
+            style="@style/SettingHint"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="@string/install_mods_hint" />
     </LinearLayout>
 </ScrollView>

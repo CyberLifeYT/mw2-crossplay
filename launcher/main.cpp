@@ -10,6 +10,7 @@
 // With no <disc>, --install brings the install already in game/ up to date.
 #include "disc.h"
 #include "fonts.h"
+#include "mods.h"
 #include "profile.h"
 #include "report.h"
 #include "settings.h"
@@ -190,6 +191,7 @@ namespace
     enum class Action
     {
         None, PlayCampaign, PlayMultiplayer, Install, InstallLocation, ChooseUpdate, Cancel, Quit,
+        Mods,
         // The profile screen and what it does.
         Profile, Back, NextPlayer, Rename, PlayAs, MaxRank, Prestige, UnlockEverything, UnlockMissions, AllStars,
         CheckUpdate, InstallUpdate,
@@ -339,6 +341,9 @@ namespace
                 break;
             case Action::InstallLocation:
                 AskFolder(Action::InstallLocation);
+                break;
+            case Action::Mods:
+                AskFolder(Action::Mods);
                 break;
             case Action::ChooseUpdate:
                 Ask(Action::ChooseUpdate, "Title update", "*");
@@ -819,6 +824,12 @@ namespace
                 sound::Load();
                 focusPlaced = false;
             }
+            else if (forAction == Action::Mods)
+            {
+                message = mods::Report(mods::Install(FromUtf8(path), setup::GameFolder()));
+                messageIsError = false;
+                focusPlaced = false;
+            }
             else { disc = FromUtf8(path); Install(disc, {}); }
         }
 
@@ -986,6 +997,9 @@ namespace
             add(Action::Profile, "PROFILES", true, "PROFILES",
                 "Set the multiplayer rank and prestige, unlock everything, and open the campaign's and Special Ops' missions.");
             add(Action::None, "MAPS", false, "MAPS", "Add and remove custom maps.\n\nNot available yet.")->shown.tag = "SOON";
+            add(Action::Mods, "MODS", installed, "MODS",
+                installed ? "Extra maps, weapons and modes from mod packs, for this install's game version.\n\nChoose the extracted folder: its .ff, .pak and .bik files are copied into the game folder. Anything else in it (scripts, plugins, documents) is reported and left alone, with why."
+                          : "Install the game first.");
 
             // The copy itself. A build nobody released has no version to compare.
             const bool released = *update::Current() != 0;
