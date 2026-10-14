@@ -1,6 +1,9 @@
 package com.mw2.recomp
 
 import android.app.Activity
+import android.app.DownloadManager
+import android.content.BroadcastReceiver
+import android.content.Context
 import android.content.Intent
 import android.net.Uri
 import android.os.Bundle
@@ -16,6 +19,7 @@ import androidx.activity.OnBackPressedCallback
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
+import androidx.core.content.ContextCompat
 import java.io.File
 import kotlin.concurrent.thread
 
@@ -59,6 +63,9 @@ class InstallActivity : AppCompatActivity() {
 
     @Volatile
     private var copying = false
+
+    private var tuDownloadId: Long = -1
+    private var tuTarget: File? = null
 
     private val values = LongArray(2)
 
@@ -120,6 +127,15 @@ class InstallActivity : AppCompatActivity() {
         begin.setOnClickListener { start() }
         cancel.setOnClickListener {
             if (running && NativeBridge.isLoaded()) NativeBridge.nativeCancelInstall()
+            if (tuDownloadId != -1L) {
+                try {
+                    (getSystemService(DOWNLOAD_SERVICE) as DownloadManager).remove(tuDownloadId)
+                } catch (_: Throwable) {
+                }
+                tuDownloadId = -1
+                tuTarget = null
+                progress.isIndeterminate = false
+            }
             copying = false
             cancel.isEnabled = false
         }
@@ -147,6 +163,20 @@ class InstallActivity : AppCompatActivity() {
             if (intent.getBooleanExtra(EXTRA_AUTO_START, false)) {
                 start()
             }
+        }
+        ContextCompat.registerReceiver(
+            this, tuDownloadDone,
+            android.content.IntentFilter(DownloadManager.ACTION_DOWNLOAD_COMPLETE),
+            ContextCompat.RECEIVER_NOT_EXPORTED,
+        )
+    }
+
+    private val tuDownloadDone = object : BroadcastReceiver() {
+        override fun onReceive(context: Context, intent: Intent) {
+            val id = intent.getLongExtra(DownloadManager.EXTRA_DOWNLOAD_ID, -1)
+            if (id != tuDownloadId) return
+            tuDownloadId = -1
+            applyDownloadedTu()
         }
     }
 
@@ -361,24 +391,12 @@ class InstallActivity : AppCompatActivity() {
         setBusy(false)
 
         if (error == null) {
-            prefs.gameDirectory = target.absolutePath
-            progressText.text = getString(R.string.install_done)
-            // The imported copy has done its job and is the size of a disc.
-            File(getExternalFilesDir(null) ?: filesDir, "import").deleteRecursively()
-            if (intent.getBooleanExtra(EXTRA_AUTO_START, false)) {
-                GameActivity.start(this)
-                finish()
-            } else {
-                AlertDialog.Builder(this)
-                    .setTitle(R.string.install_game)
-                    .setMessage(R.string.install_done)
-                    .setPositiveButton(R.string.play) { _, _ ->
-                        GameActivity.start(this)
-                        finish()
-                    }
-                    .setNegativeButton(R.string.close) { _, _ -> finish() }
-                    .show()
+            // TU6 builds install the disc first; the update applies after.
+            if (isTu6() && !safelyInstalled(target)) {
+                startTuUpdate(target)
+                return
             }
+            installedDone(target)
         } else {
             progressText.text = getString(R.string.install_failed, error)
             AlertDialog.Builder(this)
@@ -389,10 +407,122 @@ class InstallActivity : AppCompatActivity() {
         }
     }
 
+    private fun safelyInstalled(target: File): Boolean = try {
+        NativeBridge.isLoaded() && NativeBridge.nativeGameInstalled(target.absolutePath)
+    } catch (_: Throwable) {
+        false
+    }
+
+    private fun installedDone(target: File) {
+        prefs.gameDirectory = target.absolutePath
+        progressText.text = getString(R.string.install_done)
+        // The imported copy has done its job and is the size of a disc.
+        File(getExternalFilesDir(null) ?: filesDir, "import").deleteRecursively()
+        if (intent.getBooleanExtra(EXTRA_AUTO_START, false)) {
+            GameActivity.start(this)
+            finish()
+        } else {
+            AlertDialog.Builder(this)
+                .setTitle(R.string.install_game)
+                .setMessage(R.string.install_done)
+                .setPositiveButton(R.string.play) { _, _ ->
+                    GameActivity.start(this)
+                    finish()
+                }
+                .setNegativeButton(R.string.close) { _, _ -> finish() }
+                .show()
+        }
+    }
+
+    private fun isTu6(): Boolean = packageName.endsWith(".tu6")
+
+    // ---- title update 6 (TU6 apps): downloaded like the PC launcher does ----
+
+    private fun tuPackageFile(): File = File(getExternalFilesDir(null) ?: filesDir, "tu6.pkg")
+
+    private fun startTuUpdate(target: File) {
+        tuTarget = target
+        val pkg = tuPackageFile()
+        // A kept package applies offline; the URL is pinned, so it cannot go stale.
+        if (pkg.exists() && pkg.length() > 100_000L) {
+            applyTuPackage(pkg, target)
+            return
+        }
+        val url = BuildConfig.MW2_TU6_URL
+        if (url.isEmpty()) {
+            progressText.text = getString(R.string.install_failed, "This TU6 build knows no update URL.")
+            return
+        }
+        try {
+            progressText.text = getString(R.string.tu6_downloading)
+            setBusy(true)
+            progress.isIndeterminate = true
+            val manager = getSystemService(DOWNLOAD_SERVICE) as DownloadManager
+            val request = DownloadManager.Request(Uri.parse(url))
+                .setTitle("Title update 6")
+                .setDescription("Downloading update")
+                .setNotificationVisibility(DownloadManager.Request.VISIBILITY_VISIBLE)
+                .setDestinationInExternalFilesDir(this, null, "tu6.pkg")
+                .setAllowedOverMetered(true)
+            tuDownloadId = manager.enqueue(request)
+        } catch (failure: Throwable) {
+            progress.isIndeterminate = false
+            setBusy(false)
+            progressText.text = getString(R.string.install_failed, failure.message ?: "download failed")
+        }
+    }
+
+    private fun applyDownloadedTu() {
+        val target = tuTarget ?: return
+        tuTarget = null
+        progress.isIndeterminate = false
+        setBusy(false)
+        // A failed download leaves no package: say so instead of applying half a file.
+        val pkg = tuPackageFile()
+        if (!pkg.exists() || pkg.length() <= 100_000L) {
+            progressText.text = getString(R.string.install_failed, "Title update 6 did not download.")
+            return
+        }
+        applyTuPackage(pkg, target)
+    }
+
+    private fun applyTuPackage(pkg: File, target: File) {
+        running = true
+        setBusy(true)
+        progress.isIndeterminate = true
+        progressText.text = getString(R.string.tu6_applying)
+        thread(name = "tu6-apply") {
+            val error = try {
+                if (!NativeBridge.isLoaded()) "The runtime is not loaded."
+                else NativeBridge.nativeApplyTu6(pkg.absolutePath, target.absolutePath)
+            } catch (failure: Throwable) {
+                failure.message ?: "unexpected failure"
+            }
+            handler.post {
+                running = false
+                progress.isIndeterminate = false
+                setBusy(false)
+                if (error == null) installedDone(target)
+                else {
+                    progressText.text = getString(R.string.install_failed, error)
+                    AlertDialog.Builder(this)
+                        .setTitle(R.string.install_game)
+                        .setMessage(getString(R.string.install_failed, error))
+                        .setPositiveButton(R.string.close, null)
+                        .show()
+                }
+            }
+        }
+    }
+
     override fun onDestroy() {
         super.onDestroy()
         handler.removeCallbacksAndMessages(null)
         copying = false
+        try {
+            unregisterReceiver(tuDownloadDone)
+        } catch (_: Throwable) {
+        }
         // An install that outlives its screen would write into a folder
         // nobody is watching; it is stopped, and what was copied is kept
         // for next time.

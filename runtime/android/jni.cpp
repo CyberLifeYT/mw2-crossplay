@@ -260,6 +260,11 @@ MW2_NATIVE(jboolean, nativeInit)(JNIEnv* env, jobject, jstring filesDir, jstring
     // backtrace above all, now reaches that file instead of /dev/null.
     android::CaptureStandardStreams();
     LOGI("--- MW2 on Android ---");
+#ifdef MW2_VERSION_TU0
+    LOGI("android: disc version (TU0)");
+#else
+    LOGI("android: title update 6 (TU6)");
+#endif
     LOGI("android: files %s", g_paths.files.c_str());
     LOGI("android: external %s", g_paths.external.c_str());
     return JNI_TRUE;
@@ -550,6 +555,20 @@ MW2_NATIVE(jstring, nativeInstallProgress)(JNIEnv* env, jobject, jlongArray out)
 MW2_NATIVE(void, nativeCancelInstall)(JNIEnv*, jobject)
 {
     install::CancelInstall();
+}
+
+// Blocking: applies the downloaded title update 6 after the disc install
+// (TU6 builds). Returns null when it worked, else the sentence to show.
+MW2_NATIVE(jstring, nativeApplyTu6)(JNIEnv* env, jobject, jstring packagePath, jstring gameDirectory)
+{
+    const std::string package = ToString(env, packagePath);
+    const std::string folder = ToString(env, gameDirectory);
+    if (package.empty() || folder.empty()) return FromString(env, "The update has nowhere to go.");
+    install::SetGameFolder(folder);
+    std::string error;
+    if (install::ApplyTu6(package, error)) return nullptr;
+    if (error.empty()) error = "The update could not be applied.";
+    return FromString(env, error);
 }
 
 // ---- what the overlay shows -------------------------------------------------

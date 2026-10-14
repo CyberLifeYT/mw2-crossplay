@@ -106,13 +106,19 @@ namespace
     // player as an invitation. Slots and nonce travel too, so a system-link
     // invitation carries everything the title's own `connect` line needs
     // (XNADDR, key, id, slots, nonce) and can join without the Live path.
+    //
+    // `tu` is the game version this copy runs (kPresenceTu0/Tu6 below): TU0
+    // plays only with TU0, TU6 only with TU6. It rides in what was padding,
+    // so the struct keeps its size and older builds -- which send zero --
+    // still parse it; zero reads as "unknown, predates versions".
     struct Presence
     {
         uint32_t magic;
         uint32_t instance;
         uint8_t kind;          // kAnnounce or kInvite
         uint8_t joinable;      // `session` holds something
-        uint8_t pad[2];
+        uint8_t tu;            // kPresenceTu0, kPresenceTu6, or 0 unknown
+        uint8_t pad;
         uint64_t account;      // big-endian
         char name[32];
         uint8_t session[online::kSessionInfoSize];
@@ -122,12 +128,26 @@ namespace
     };
     constexpr uint32_t kPresenceMagic = 0x4D573250;   // "MW2P"
     constexpr uint8_t kAnnounce = 0, kInvite = 1;
+    constexpr uint8_t kPresenceTu0 = 1, kPresenceTu6 = 2;
+#ifdef MW2_VERSION_TU0
+    constexpr uint8_t kOwnTu = kPresenceTu0;
+    constexpr const char* kOwnTuName = "TU0";
+#else
+    constexpr uint8_t kOwnTu = kPresenceTu6;
+    constexpr const char* kOwnTuName = "TU6";
+#endif
+    constexpr const char* TuName(uint8_t tu)
+    {
+        return tu == kPresenceTu6 ? "TU6" : tu == kPresenceTu0 ? "TU0" : "an older build";
+    }
     constexpr auto kAnnounceEvery = std::chrono::seconds(1);
 
     struct Peer
     {
         uint64_t id = 0, account = 0;
         bool joinable = false;
+        uint8_t tu = 0;        // the game version they run, 0 when unknown
+        bool warnedTu = false; // told once that their version differs
         uint8_t session[online::kSessionInfoSize]{};
         uint8_t publicSlots = 0, privateSlots = 0;
         uint8_t nonce[8]{};
@@ -344,7 +364,7 @@ namespace
             accept_ = env::Flag("MW2_LAN_ACCEPT");
             char text[INET_ADDRSTRLEN];
             inet_ntop(AF_INET, &bound.sin_addr, text, sizeof text);
-            LOGI("online: lan as \"%s\" at %s:%u, broadcasts on %u", name_.c_str(), text,
+            LOGI("online: lan as \"%s\" (%s) at %s:%u, broadcasts on %u", name_.c_str(), kOwnTuName, text,
                  ntohs(bound.sin_port), sharedPort_);
             // Discovery also goes to every connected subnet's broadcast
             // address: a limited broadcast (255.255.255.255) is filtered on
@@ -530,6 +550,8 @@ namespace
             presence.instance = instance_;
             presence.kind = kind;
             presence.joinable = hasJoinable_;
+            presence.tu = kOwnTu;
+            presence.pad = 0;
             presence.account = BigEndian64(Account());
             std::snprintf(presence.name, sizeof presence.name, "%s", name_.c_str());
             if (hasJoinable_)
@@ -572,6 +594,13 @@ namespace
             peer.publicSlots = presence.publicSlots;
             peer.privateSlots = presence.privateSlots;
             std::memcpy(peer.nonce, presence.nonce, sizeof peer.nonce);
+            if (presence.tu != 0 && presence.tu != kOwnTu && !peer.warnedTu)
+            {
+                peer.warnedTu = true;
+                LOGW("online: \"%s\" runs %s and this copy runs %s: versions never interoperate, "
+                     "match them before joining", name.c_str(), TuName(presence.tu), kOwnTuName);
+            }
+            peer.tu = presence.tu;
             if (peer.account == Account() && !warned_)
             {
                 warned_ = true;

@@ -18,7 +18,9 @@ crossplay over LAN** (system-link transported as plain UDP).
 1. **Multiplayer actually builds on Android** (`android/app/build.gradle.kts`):
    - `campaign` flavor: `-DMW2_TITLE=sp -DMW2_ONLINE=none`
    - `multiplayer` flavor: `-DMW2_TITLE=mp -DMW2_ONLINE=lan`
-   
+   - `tu0` / `tu6` flavors: the game version (`-DMW2_VERSION=tu6` for TU6;
+     TU0 keeps the original application IDs, TU6 adds `.tu6`).
+    
    (`lan` = plain UDP system-link. `none` leaves MP with single-device
    system-link only. Steam is PC-only and intentionally not used on Android.
    Code: `runtime/online/lan.cpp`, selected in `CMakeLists.txt:112-129`,
@@ -48,12 +50,16 @@ crossplay over LAN** (system-link transported as plain UDP).
   - `default.xex` (SP): `990e640d3a92544f9d585e71faf1ab65082d37ec6f5865b2599335fa123bf6ff`
   - `default_mp.xex` (MP): `aacc47aff3221f3bd9129e80827fd3bcd74aa43bf74bb5c5ddbd0597c0d5fcde`
 - Entry points (disc version): SP `0x82370938`, MP `0x823A7FE0`.
-- Android builds target the **disc version (TU0)** — `CMakeLists.txt` forces
-  `MW2_VERSION=tu0` when `ANDROID` is set. **Crossplay demands identical
-  versions on both ends: build the PC side with `VERSION=tu0` too**
-  (a TU6 PC build and a TU0 Android build are different executables and will
-  not interoperate). TU6 needs the title-update package in `mw2/update/`;
-  TU0 needs nothing but the disc.
+- Android builds come in both game versions (TU0 packages
+  `com.mw2.recomp.sp`/`.mp`, TU6 as `.sp.tu6`/`.mp.tu6`) — `CMakeLists.txt`
+  takes `-DMW2_VERSION=` from the TU flavor (default `tu0`).
+  **Crossplay demands identical versions on both ends** (a TU6 PC build and
+  a TU0 Android build are different executables and will not interoperate;
+  LAN presence carries the version and mismatches are logged).
+  Build the PC side to match: `Build PC TU0` vs `Build PC TU6`.
+  TU6 needs the title-update package in `mw2/update/` at build time (CI
+  fetches it privately) and downloads it again at install time; TU0 needs
+  nothing but the disc.
 - Phone: ARM64 (`arm64-v8a`), Android 10+ (APK declares `minSdk 26`),
   Vulkan 1.1+ (1.3 preferred; 1.1 `VkRenderPass` fallback + CPU BC decoder
   included), ~8 GB free.
@@ -76,9 +82,9 @@ recompiles and builds on a GitHub runner:
      assets repo only. Sent as an `Authorization` header — never embed tokens
      in the URL (URL parsers choke on them and they leak into request lines).
 3. Android `versionCode` (`android/app/build.gradle.kts`) **must go up with
-   every published release** (currently 12, or set `MW2_VERSION_CODE` in CI) —
+   every published release** (currently 14, or set `MW2_VERSION_CODE` in CI) —
    Android will not install an update over an APK with an equal or higher
-   code. Both flavors share the number (they are separate packages).
+   code. All four flavors share the number (they are separate packages).
 
 ## Release policy (standing)
 
@@ -86,35 +92,51 @@ Every update ships through CI; skip only components whose code did not change:
 
 1. Bump Android `versionCode` iff `android/` or `runtime/` changed (the
    native lib ships inside the APK).
-2. Push: `Build Android APK` (campaign) runs itself; dispatch `Build MP APK`.
+2. Push: `Build Android APK` (campaign TU0) runs itself; dispatch it again
+   with `tu: tu6`, plus `Build MP APK` with `tu: tu0` and `tu: tu6`.
+   (Two flavor dimensions now: variant tasks are `assembleSpTu0Release`,
+   `assembleSpTu6Release`, `assembleMpTu0Release`, `assembleMpTu6Release`.)
 3. New tag (`v0.1.0-alpha.N`), pre-release, with notes. Notes MUST carry an
    `APK versionCode: N` line — the in-app updater reads it.
-4. Dispatch `Build PC TU0` with that tag: it attaches the PC archives itself.
-5. Attach both APK artifacts to the release by hand (workflows do not).
+4. Dispatch `Build PC TU0` and `Build PC TU6` with that tag: they attach the
+   PC archives themselves.
+5. Attach all four APK artifacts to the release by hand (workflows do not;
+   `Build Android APK` only self-attaches the campaign TU0 to `v0.0.1`).
 6. Never attach or commit game files (ISO/XEX/PE/fastfiles) anywhere.
 7. Invite protocol (Presence slots/nonce) changes break old builds: both
    ends of a match must run the same alpha. Say so in the notes when it
-   changes (unchanged since alpha.6).
+   changes (unchanged since alpha.6; the TU byte reuses padding, same size).
 
 ## Title update 6 (TU6) and mods
 
-TU6 PC builds are green (linux + windows, sp offline + mp lan) and ride on
-the releases next to the TU0 packs. TU6 plays ONLY with TU6 — not with TU0
-PCs or phones (Android stays TU0).
+TU6 builds are green on PC (linux + windows, sp offline + mp lan) and on
+Android (campaign + multiplayer TU6 APKs), and ride on the releases next to
+the TU0 packs. **Same-version rule: TU6 plays ONLY with TU6 — not with TU0
+PCs or phones, and TU0 only with TU0.** The launcher, the HUD and `game.log`
+all name the version (`lan as "name" (TU6) ...`; a heard mismatch logs a
+warning naming both sides).
 
+- Four phone apps, two per title: `com.mw2.recomp.sp` / `.mp` (TU0, the
+  original packages, so updates install over them) beside
+  `com.mw2.recomp.sp.tu6` / `.mp.tu6` (TU6). Cross-launch stays within its
+  own version, and the updater never offers the other version's APK.
 - The TU6 package (`TU_10LC20N_…`, 2 patches + 3 fastfiles) lives in the
-  **private** assets repo under `title-updates/TU6/` — same place CI reads
-  it from. Never publish it.
+  **private** assets repo under `title-updates/TU6/` for CI — same place CI
+  reads it from. Never publish it. On the phone it is **downloaded at
+  install time** from the public title-updates archive (pinned commit, same
+  URL the PC launcher uses) and applied on the device after the disc copy;
+  the APK itself carries no game files.
 - PC TU6 builds come from the `Build PC TU6` workflow (sp offline + mp lan,
-  stamped with the release tag). **TU6 plays only with TU6** — not with TU0
-  copies on PC or phones.
-- The PC launcher installs/updates TU6 itself: point it at your ISO and it
-  downloads nothing (the package rides with the build's installer flow).
+  stamped with the release tag). The PC launcher installs/updates TU6
+  itself: point it at your ISO and it downloads nothing extra (the package
+  rides with the build's installer flow).
+- Android TU6 builds come from `Build Android APK` / `Build MP APK` with the
+  `tu: tu6` input (recompiled on the runner from the patched executables;
+  the committed `ppc/` tree stays TU0 for the campaign TU0 build).
 - Loading a mod: drop its `.ff` files into the installed `game/` folder
-  beside the others — the engine reads that one flat directory, so a mod
-  fastfile with the right name just loads. Keep the originals aside.
-- Android stays TU0 for now: a TU6 phone build needs its own recompile +
-  on-device update application, which is a separate piece of work.
+  beside the others — the engine reads that one flat directory, so a
+  same-version fastfile just loads. Keep the originals aside. Each phone app
+  has its own `game/` folder, so TU6 mods go to the TU6 app's.
 
 ## Shader seed (refreshing the bundled cache)
 
@@ -164,11 +186,11 @@ VERSION=tu0 RECOMPILE_ONLY=1 TITLE=mp ISO="<path-to-your.iso>" ./build.sh
 # 2. adrenotools (Turnip driver support, optional)
 ./android/fetch_deps.sh
 
-# 3. APKs
+# 3. APKs (TU flavor second: SpTu0/SpTu6/MpTu0/MpTu6 + Debug/Release)
 cd android
-./gradlew assembleCampaignRelease assembleMultiplayerRelease
-# -> app/build/outputs/apk/campaign/release/app-campaign-release.apk
-# -> app/build/outputs/apk/multiplayer/release/app-multiplayer-release.apk
+./gradlew assembleSpTu0Release assembleMpTu0Release
+# -> app/build/outputs/apk/spTu0/release/*.apk
+# -> app/build/outputs/apk/mpTu0/release/*.apk
 ```
 
 PC (same tree, TU0 + LAN for crossplay):
@@ -184,7 +206,9 @@ VERSION=tu0 TITLE=sp ./build.sh
 ## Crossplay: PC ↔ Android over LAN
 
 - All players on the **same network**, all builds `ONLINE=lan`
-  (Android MP already is; PC needs `ONLINE=lan`), all `VERSION=tu0`.
+  (Android MP already is; PC needs `ONLINE=lan`), all the **same game
+  version**: TU0 with TU0, TU6 with TU6. The HUD names it (`LAN: N · TU6`)
+  and a heard mismatch is logged naming both sides.
 - Same broadcast port: `MW2_LAN_PORT` (default `3074`); one copy per
   machine per port slot — a second copy on one PC is a second player.
 - Flow: host starts a system-link lobby (PLAY ONLINE → PRIVATE MATCH with
@@ -231,7 +255,8 @@ server list *and* dead invites — one failure, two symptoms. Check in order:
 - Extra maps, weapons and modes shipped as `.ff` fastfiles (built for TU6)
   drop straight into the installed `game/` folder beside the others — the
   engine reads that one flat directory, so a same-version fastfile just
-  loads. Keep the originals aside. TU6 builds only (Android stays TU0).
+  loads. Keep the originals aside. TU6 fastfiles go to TU6 installs (PC TU6
+  or the TU6 phone apps), TU0 fastfiles to TU0 installs.
 - Bot Warfare's **bots do not run here**: their logic is scripts for the
   CoD Xe **plugin** (`codxe.xex`), and this port has no plugin system — it
   statically recompiles the game alone, so there is nothing for the plugin

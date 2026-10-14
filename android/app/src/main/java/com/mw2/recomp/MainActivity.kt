@@ -87,9 +87,13 @@ class MainActivity : AppCompatActivity() {
             val name = info.versionName ?: ""
             val code = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) info.longVersionCode.toInt()
             else info.versionCode
-            versionTag.text = "$name · vcode $code · TU0 · DISC VERSION 1.0.557"
+            val tu = BuildConfig.MW2_TU.uppercase()
+            val build = if (isTu6()) "TITLE UPDATE 6" else "DISC VERSION 1.0.557"
+            versionTag.text = "$name · vcode $code · $tu · $build"
         } catch (_: Throwable) {
         }
+        // TU6 apps offer the TU0 archives instead (PC launcher parity).
+        if (isTu6()) tu6Button.text = getString(R.string.entry_tu0)
 
         directLaunchSwitch.isChecked = prefs.autoLaunch
         directLaunchSwitch.setOnCheckedChangeListener { _, isChecked ->
@@ -158,7 +162,15 @@ class MainActivity : AppCompatActivity() {
         }
         tu6Button.setOnClickListener {
             select(tu6Button)
-            showDetail(getString(R.string.entry_tu6), getString(R.string.tu6_detail_phone))
+            // Mirror of the PC launcher's GET TU6/GET TU0 entry: each build
+            // points at the other game version's archives. Same-version rule:
+            // TU0 plays only with TU0, TU6 only with TU6.
+            if (isTu6()) {
+                tu6Button.text = getString(R.string.entry_tu0)
+                showDetail(getString(R.string.entry_tu0), getString(R.string.tu0_detail_phone))
+            } else {
+                showDetail(getString(R.string.entry_tu6), getString(R.string.tu6_detail_phone))
+            }
             openReleasesPage()
         }
         updatesButton.setOnClickListener {
@@ -259,7 +271,8 @@ class MainActivity : AppCompatActivity() {
             // MP needs the FULL disc: mw2_campaign_lean.iso pruned the
             // multiplayer fastfiles to save 2.7 GB, so it can never satisfy
             // a multiplayer install. SP accepts either, preferring lean.
-            val isMp = packageName.endsWith(".mp")
+            // (TU6 installs from the same disc; the update applies after.)
+            val isMp = isMp()
             val candidateIsos = if (isMp) {
                 listOf(
                     File("/sdcard/Download/mw2.iso"),
@@ -365,13 +378,20 @@ class MainActivity : AppCompatActivity() {
         detailText.text = text
     }
 
+    /** com.mw2.recomp.mp and com.mw2.recomp.mp.tu6 are both multiplayer. */
+    private fun isMp(): Boolean = packageName.contains(".mp")
+
+    /** com.mw2.recomp.sp.tu6 / .mp.tu6 run title update 6. */
+    private fun isTu6(): Boolean = packageName.endsWith(".tu6")
+
     /** The other flavor's package, or null when it is not installed. */
     private fun otherApp(): Pair<String, String>? {
-        val isMp = packageName.endsWith(".mp")
-        val pkg = if (isMp) "com.mw2.recomp.sp" else "com.mw2.recomp.mp"
+        // Same game version on both ends: TU6 cross-launches the TU6 sibling.
+        val base = if (isMp()) ".sp" else ".mp"
+        val pkg = "com.mw2.recomp$base" + if (isTu6()) ".tu6" else ""
         val label = getString(
             R.string.launch_other,
-            getString(if (isMp) R.string.other_name_campaign else R.string.other_name_multiplayer),
+            getString(if (isMp()) R.string.other_name_campaign else R.string.other_name_multiplayer),
         )
         return try {
             packageManager.getLaunchIntentForPackage(pkg) ?: return null
@@ -399,7 +419,7 @@ class MainActivity : AppCompatActivity() {
                 getString(
                     R.string.other_missing,
                     getString(
-                        if (packageName.endsWith(".mp")) R.string.other_name_campaign
+                        if (isMp()) R.string.other_name_campaign
                         else R.string.other_name_multiplayer,
                     ),
                 ),
@@ -449,6 +469,14 @@ class MainActivity : AppCompatActivity() {
         entry.setBackgroundResource(R.drawable.bg_entry_selected)
     }
 
+    /** TU-aware asset match: TU0 never takes a TU6 APK and vice versa.
+     * Unmarked (pre-TU) assets match TU0 only, the version they were. */
+    private fun assetMatches(asset: String, wantTitle: String, wantTu: String): Boolean {
+        if (!asset.contains(wantTitle, ignoreCase = true)) return false
+        val hasTu6 = asset.contains("tu6", ignoreCase = true)
+        return if (wantTu == "tu6") hasTu6 else !hasTu6
+    }
+
     /** A newer published APK, if there is one: silent when offline. */
     private fun checkForUpdates(manual: Boolean = false) {
         thread(name = "update-check", isDaemon = true) {
@@ -462,13 +490,14 @@ class MainActivity : AppCompatActivity() {
                 }
                 if (connection.responseCode == 200) {
                     val releases = JSONArray(connection.inputStream.bufferedReader().readText())
-                    val want = if (packageName.endsWith(".mp")) "multiplayer" else "campaign"
+                    val wantTitle = if (isMp()) "multiplayer" else "campaign"
+                    val wantTu = if (isTu6()) "tu6" else "tu0"
                     for (i in 0 until releases.length()) {
                         val release = releases.getJSONObject(i)
                         if (release.optBoolean("draft")) continue
                         val assets = release.optJSONArray("assets") ?: continue
                         val matches = (0 until assets.length()).any {
-                            assets.getJSONObject(it).optString("name").contains(want, ignoreCase = true)
+                            assetMatches(assets.getJSONObject(it).optString("name"), wantTitle, wantTu)
                         }
                         if (!matches) continue
                         val tag = release.optString("tag_name")
@@ -485,7 +514,7 @@ class MainActivity : AppCompatActivity() {
                                 .map { assets.getJSONObject(it) }
                                 .firstOrNull {
                                     it.optString("name").endsWith(".apk", ignoreCase = true) &&
-                                        it.optString("name").contains(want, ignoreCase = true)
+                                        assetMatches(it.optString("name"), wantTitle, wantTu)
                                 }?.optString("browser_download_url") ?: ""
                             val notes = release.optString("body").take(1500)
                             offered = true

@@ -89,6 +89,15 @@ namespace install
     // and the next install carries on from there.
     void CancelInstall();
 
+#ifdef MW2_ANDROID
+    // Applies downloaded title update 6 to an installed disc (TU6 builds
+    // only): patches both executables in memory exactly as the PC launcher's
+    // install does, and lays the update's fastfiles beside the disc's. The
+    // package is the STFS file the app downloaded at install time; game files
+    // never ride in the APK. False with `error` set, a sentence to show.
+    bool ApplyTu6(const std::filesystem::path& package, std::string& error);
+#endif
+
     // The data one executable of the title leaves for the next (the console's
     // XamLoaderSetLaunchData): the campaign and the multiplayer are two
     // programs here as there, and it crosses from one to the other in the

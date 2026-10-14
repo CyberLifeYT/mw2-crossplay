@@ -268,16 +268,21 @@ class GameActivity : AppCompatActivity(), NativeListener {
                 // Other copies heard on the network (multiplayer only). Zero
                 // with a friend hosting beside this phone means discovery is
                 // not arriving -- same WiFi, firewall, hotspot; see the guide.
-                val lanPeers = if (packageName.endsWith(".mp")) {
+                // The TU badge matters: TU0 plays only with TU0, TU6 with TU6.
+                val isMpHud = packageName.contains(".mp")
+                val tuHud = BuildConfig.MW2_TU.uppercase()
+                val lanPeers = if (isMpHud) {
                     try {
                         NativeBridge.nativeLanPeers()
                     } catch (_: Throwable) {
                         0
                     }
                 } else 0
-                val lanPart = if (packageName.endsWith(".mp")) {
-                    String.format(Locale.US, "  •  LAN: %d", lanPeers)
-                } else ""
+                val lanPart = if (isMpHud) {
+                    String.format(Locale.US, "  •  LAN: %d · %s", lanPeers, tuHud)
+                } else {
+                    String.format(Locale.US, "  •  %s", tuHud)
+                }
 
                 statsText.text = String.format(
                     Locale.US,
@@ -323,7 +328,7 @@ class GameActivity : AppCompatActivity(), NativeListener {
                         append("MEMORY & VIEWPORT\n")
                         append("  App / System Total RAM: $ramStr\n")
                         append("  Internal Render: ${resW}×${resH}  •  Refresh: ${refreshHz().roundToInt()} Hz\n")
-                        if (packageName.endsWith(".mp")) {
+                        if (packageName.contains(".mp")) {
                             append("\nNETWORK\n")
                             append("  Players heard on LAN: $lanPeers\n")
                         }
@@ -700,7 +705,7 @@ class GameActivity : AppCompatActivity(), NativeListener {
         // MP refuses to start matches without a link; runtime defaults to up
         // for MP and down for SP (kernel/net.cpp), but be explicit so a
         // misbuilt lib still reports a link in the MP app.
-        if (packageName.endsWith(".mp")) {
+        if (packageName.contains(".mp")) {
             NativeBridge.nativeSetOption("MW2_NET_LINK", "1")
         }
         NativeBridge.nativeSetOption("MW2_NO_AUDIO", if (prefs.audioEnabled) "" else "1")
@@ -819,7 +824,7 @@ class GameActivity : AppCompatActivity(), NativeListener {
             getString(R.string.resume) to { _: android.content.DialogInterface -> },
             getString(R.string.edit_controls) to { _: android.content.DialogInterface -> beginEditing() },
         )
-        if (packageName.endsWith(".mp")) {
+        if (packageName.contains(".mp")) {
             labels.add(getString(R.string.invite_players) to { _: android.content.DialogInterface -> inviteNetworkPlayers() })
             labels.add(getString(R.string.join_game) to { _: android.content.DialogInterface -> pickNetworkPeer() })
             labels.add(getString(R.string.max_rank) to { _: android.content.DialogInterface -> runCheat(R.string.max_rank, Cheats::maxRank) })

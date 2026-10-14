@@ -35,11 +35,24 @@ else()
 endif()
 # And which version of it: the one title update 6 makes of the disc's (tu6),
 # or the disc's own (tu0), recompiled into ppc_tu0/ and ppc_mp_tu0/.
+# On Android the TU dimension of android/app/build.gradle.kts picks this with
+# -DMW2_VERSION=tu6; tu0 is the default. TU6 trees are generated on the CI
+# runner (build.sh VERSION=tu6 regenerates ppc//ppc_mp/, or ppc_tu6//ppc_mp_tu6/
+# when those names are used); a tu6 configure without a TU6 tree fails below
+# at the empty-tree check rather than miscompiling the disc's tree as TU6.
 if(ANDROID)
-    set(MW2_VERSION "tu0" CACHE STRING "Which version of the executable" FORCE)
-    add_compile_definitions(MW2_VERSION_TU0=1)
-    if(EXISTS "${MW2_PPC_DIR}_tu0")
-        set(MW2_PPC_DIR "${MW2_PPC_DIR}_tu0")
+    set(MW2_VERSION "tu0" CACHE STRING "Which version of the executable: tu6 (title update 6) or tu0 (the disc's)")
+    if(MW2_VERSION STREQUAL "tu0")
+        add_compile_definitions(MW2_VERSION_TU0=1)
+        if(EXISTS "${MW2_PPC_DIR}_tu0")
+            set(MW2_PPC_DIR "${MW2_PPC_DIR}_tu0")
+        endif()
+    elseif(MW2_VERSION STREQUAL "tu6")
+        if(EXISTS "${MW2_PPC_DIR}_tu6")
+            set(MW2_PPC_DIR "${MW2_PPC_DIR}_tu6")
+        endif()
+    else()
+        message(FATAL_ERROR "MW2_VERSION must be tu6 or tu0, not '${MW2_VERSION}'")
     endif()
 else()
     set(MW2_VERSION "tu6" CACHE STRING "Which version of the executable: tu6 (title update 6) or tu0 (the disc's)")
@@ -54,6 +67,29 @@ else()
 endif()
 
 # ---- recompiled guest code -------------------------------------------------
+# Guard: a TU6 tree's entry point differs from the disc's (SP 0x82370940 vs
+# 0x82370938, MP 0x823A90C8 vs 0x823A7FE0), and the mapping names it. A build
+# whose tree is the other version's fails here instead of miscompiling it.
+if((MW2_VERSION STREQUAL "tu6" AND MW2_TITLE STREQUAL "sp") OR
+   (MW2_VERSION STREQUAL "tu0" AND MW2_TITLE STREQUAL "sp" AND ANDROID))
+    file(READ "${MW2_PPC_DIR}/ppc_func_mapping.cpp" _mw2_mapping)
+    string(TOLOWER "${_mw2_mapping}" _mw2_mapping)
+    if(MW2_VERSION STREQUAL "tu6" AND NOT _mw2_mapping MATCHES "0x82370940")
+        message(FATAL_ERROR "${MW2_PPC_DIR} is not a TU6 campaign tree -- run TITLE=sp VERSION=tu6 ./build.sh first")
+    elseif(MW2_VERSION STREQUAL "tu0" AND NOT _mw2_mapping MATCHES "0x82370938")
+        message(FATAL_ERROR "${MW2_PPC_DIR} is not a TU0 campaign tree")
+    endif()
+endif()
+if((MW2_VERSION STREQUAL "tu6" AND MW2_TITLE STREQUAL "mp") OR
+   (MW2_VERSION STREQUAL "tu0" AND MW2_TITLE STREQUAL "mp" AND ANDROID))
+    file(READ "${MW2_PPC_DIR}/ppc_func_mapping.cpp" _mw2_mapping)
+    string(TOLOWER "${_mw2_mapping}" _mw2_mapping)
+    if(MW2_VERSION STREQUAL "tu6" AND NOT _mw2_mapping MATCHES "0x823a90c8")
+        message(FATAL_ERROR "${MW2_PPC_DIR} is not a TU6 multiplayer tree -- run TITLE=mp VERSION=tu6 ./build.sh first")
+    elseif(MW2_VERSION STREQUAL "tu0" AND NOT _mw2_mapping MATCHES "0x823a7fe0")
+        message(FATAL_ERROR "${MW2_PPC_DIR} is not a TU0 multiplayer tree")
+    endif()
+endif()
 file(GLOB PPC_SOURCES CONFIGURE_DEPENDS "${MW2_PPC_DIR}/ppc_recomp.*.cpp")
 list(APPEND PPC_SOURCES "${MW2_PPC_DIR}/ppc_func_mapping.cpp")
 if(NOT PPC_SOURCES)
@@ -99,6 +135,27 @@ if(ANDROID)
     # JNI surface the app talks to (docs/android.md).
     file(GLOB ANDROID_SOURCES CONFIGURE_DEPENDS "${CMAKE_SOURCE_DIR}/runtime/android/*.cpp")
     list(APPEND RUNTIME_SOURCES ${ANDROID_SOURCES} "${CMAKE_SOURCE_DIR}/launcher/disc.cpp")
+    # The title-update package reader (dependency-free STFS): the TU6 apps
+    # apply the update on the device after copying the disc.
+    list(APPEND RUNTIME_SOURCES "${CMAKE_SOURCE_DIR}/launcher/package.cpp")
+    # XenonRecomp's patcher, which turns the disc's executables into the
+    # update's. Present when the tree was recompiled on this machine (build.sh
+    # clones it); absent for a bare checkout, where TU6 apps report that the
+    # APK must come from CI instead of failing to link.
+    set(XENON "${CMAKE_SOURCE_DIR}/XenonRecomp")
+    if(EXISTS "${XENON}/XenonUtils/xex_patcher.cpp" AND EXISTS "${XENON}/XenonUtils/xex_patcher.h")
+        list(APPEND RUNTIME_SOURCES
+            "${XENON}/XenonUtils/xex_patcher.cpp"
+            "${XENON}/XenonUtils/memory_mapped_file.cpp"
+            "${XENON}/thirdparty/libmspack/libmspack/mspack/lzxd.c"
+            "${XENON}/thirdparty/tiny-AES-c/aes.c")
+        set(MW2_XENON_INCLUDES
+            "${XENON}/XenonUtils"
+            "${XENON}/thirdparty/simde"
+            "${XENON}/thirdparty/libmspack/libmspack/mspack"
+            "${XENON}/thirdparty/tiny-AES-c"
+            "${XENON}/thirdparty/TinySHA1")
+    endif()
 endif()
 
 # The glue build.sh generates from the recompiled output -- a stub for every
@@ -170,7 +227,21 @@ if(MW2_XEX_SHA256_SP AND MW2_XEX_SHA256_MP)
     set(MW2_HASH_DEFINITIONS
         MW2_XEX_SHA256_SP="${MW2_XEX_SHA256_SP}" MW2_XEX_SHA256_MP="${MW2_XEX_SHA256_MP}"
         MW2_DISC_SHA256_SP="${MW2_DISC_SHA256_SP}" MW2_DISC_SHA256_MP="${MW2_DISC_SHA256_MP}")
+    # The TU fastfiles a TU6 install verifies its downloaded update against.
+    # TU6 CI passes all three; without them a TU6 build refuses to apply the
+    # update on the device (empty define) rather than trusting any bytes.
+    foreach(_ff PATCH_MP DLC1_UI_MP DLC2_UI_MP)
+        if(MW2_UPDATE_SHA256_${_ff})
+            list(APPEND MW2_HASH_DEFINITIONS MW2_UPDATE_SHA256_${_ff}="${MW2_UPDATE_SHA256_${_ff}}")
+        else()
+            list(APPEND MW2_HASH_DEFINITIONS MW2_UPDATE_SHA256_${_ff}="")
+        endif()
+    endforeach()
     target_compile_definitions(mw2 PRIVATE ${MW2_HASH_DEFINITIONS})
+    if(MW2_XENON_INCLUDES)
+        target_include_directories(mw2 PRIVATE ${MW2_XENON_INCLUDES})
+        target_compile_definitions(mw2 PRIVATE MW2_HAVE_XEX_PATCHER=1)
+    endif()
     message(STATUS "XEX hashes given on the command line; mw2/ is not needed")
 else()
     if(MW2_VERSION STREQUAL "tu0")

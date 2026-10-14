@@ -51,7 +51,7 @@ android {
         // Bump EVERY published release: Android refuses to install an update
         // whose versionCode is at or below the installed one. CI may set
         // MW2_VERSION_CODE instead of editing this file.
-        versionCode = setting("MW2_VERSION_CODE")?.toIntOrNull() ?: 13
+        versionCode = setting("MW2_VERSION_CODE")?.toIntOrNull() ?: 14
         // Which build this is, carried inside the apk. "The wrong apk" has
         // cost more than one evening, and every time the only way to settle
         // it was to guess. The launcher shows this and Android's app info
@@ -87,6 +87,15 @@ android {
                 val sp = setting("MW2_XEX_SHA256_SP") ?: "990e640d3a92544f9d585e71faf1ab65082d37ec6f5865b2599335fa123bf6ff"
                 val mp = setting("MW2_XEX_SHA256_MP") ?: "aacc47aff3221f3bd9129e80827fd3bcd74aa43bf74bb5c5ddbd0597c0d5fcde"
                 arguments += listOf("-DMW2_XEX_SHA256_SP=$sp", "-DMW2_XEX_SHA256_MP=$mp")
+                // TU6 builds verify the disc's executables against these, then
+                // patch them on the device; the TU fastfiles' hashes gate the
+                // downloaded update. TU0 builds leave all three unset (their
+                // executables ARE the disc's).
+                setting("MW2_DISC_SHA256_SP")?.let { arguments += listOf("-DMW2_DISC_SHA256_SP=$it") }
+                setting("MW2_DISC_SHA256_MP")?.let { arguments += listOf("-DMW2_DISC_SHA256_MP=$it") }
+                setting("MW2_UPDATE_SHA256_PATCH_MP")?.let { arguments += listOf("-DMW2_UPDATE_SHA256_PATCH_MP=$it") }
+                setting("MW2_UPDATE_SHA256_DLC1_UI_MP")?.let { arguments += listOf("-DMW2_UPDATE_SHA256_DLC1_UI_MP=$it") }
+                setting("MW2_UPDATE_SHA256_DLC2_UI_MP")?.let { arguments += listOf("-DMW2_UPDATE_SHA256_DLC2_UI_MP=$it") }
                 cppFlags += (setting("MW2_NATIVE_OPTIMISATION") ?: "-O3")
             }
         }
@@ -96,7 +105,15 @@ android {
     // its own (build.sh TITLE=sp|mp). They are separate apps: each is a
     // hundred-odd megabytes of recompiled code, and nobody wants both in one
     // download.
+    //
+    // Each title comes in two game versions that never interoperate (TU0 plays
+    // only with TU0, TU6 only with TU6): the second dimension. TU0 keeps the
+    // original packages (com.mw2.recomp.sp/.mp) so updates install over it;
+    // TU6 rides beside them as .sp.tu6/.mp.tu6. Variant tasks are therefore
+    // assembleSpTu0Release, assembleSpTu6Release, assembleMpTu0Release and
+    // assembleMpTu6Release (see .github/workflows/build-apk.yml).
     flavorDimensions += "title"
+    flavorDimensions += "tu"
     productFlavors {
         create("campaign") {
             dimension = "title"
@@ -114,6 +131,27 @@ android {
             // makes no sense on Android (no Steam client), and "none" would
             // leave MP with system-link on one device only.
             externalNativeBuild { cmake { arguments += listOf("-DMW2_TITLE=mp", "-DMW2_ONLINE=lan") } }
+        }
+        create("tu0") {
+            dimension = "tu"
+            versionNameSuffix = "-tu0"
+            buildConfigField("String", "MW2_TU", "\"tu0\"")
+            buildConfigField("String", "MW2_TU6_URL", "\"\"")
+        }
+        create("tu6") {
+            dimension = "tu"
+            applicationIdSuffix = ".tu6"
+            versionNameSuffix = "-tu6"
+            buildConfigField("String", "MW2_TU", "\"tu6\"")
+            // Title update 6, downloaded at install time like the PC launcher
+            // does (launcher/setup.cpp kUpdateUrl): a public archive of title
+            // updates, pinned to a commit so the file cannot change. Game
+            // files never ride in the APK itself.
+            buildConfigField(
+                "String", "MW2_TU6_URL",
+                "\"https://raw.githubusercontent.com/codxenon/xbox360-title-updates/25de2389ce214dae6159fcd45a9581cb3b640bd9/games/Call%20of%20Duty%20-%20Modern%20Warfare%202%20%28USA%2C%20Europe%29/TU6/TU_10LC20N_0000018000000.00000000001GA\"",
+            )
+            externalNativeBuild { cmake { arguments += listOf("-DMW2_VERSION=tu6") } }
         }
     }
 

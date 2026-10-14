@@ -142,6 +142,10 @@ object NativeBridge {
 
     external fun nativeCancelInstall()
 
+    /** Blocking. Applies the downloaded title update 6 (TU6 builds only).
+     * Returns null when it worked, or a sentence to show when it did not. */
+    external fun nativeApplyTu6(packagePath: String, gameDir: String): String?
+
     // ---- what the overlay shows --------------------------------------------
 
     /** Fills [out] with { frames per second, texture MB, width, height, frame time ms, presented frames }. */

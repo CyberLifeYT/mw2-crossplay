@@ -134,17 +134,20 @@ TITLE=mp ./build.sh
 # 2. Fetch third-party dependencies (libadrenotools)
 ./android/fetch_deps.sh
 
-# 3. Compile the Campaign APK
+# 3. Compile the Campaign APK (TU0)
 cd android
-./gradlew assembleCampaignRelease
+./gradlew assembleSpTu0Release
 
 # Or compile the Multiplayer APK:
-./gradlew assembleMultiplayerRelease
+./gradlew assembleMpTu0Release
+
+# TU6 variants append Tu6 (needs TU6 recompiled trees; CI does this):
+./gradlew assembleSpTu6Release assembleMpTu6Release
 ```
 
 The compiled APK will be located at:
-- `android/app/build/outputs/apk/campaign/release/app-campaign-release.apk`
-- `android/app/build/outputs/apk/multiplayer/release/app-multiplayer-release.apk`
+- `android/app/build/outputs/apk/spTu0/release/*.apk`
+- `android/app/build/outputs/apk/mpTu0/release/*.apk`
 
 ### GitHub Actions CI
 The workflow in [.github/workflows/android.yml](../.github/workflows/android.yml) automates APK builds:

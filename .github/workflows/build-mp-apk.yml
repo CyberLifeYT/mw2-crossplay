@@ -1,8 +1,9 @@
 # Builds the multiplayer APK for this fork from the private assets repo.
 #
-# Unlike build-apk.yml (campaign only, from the committed ppc/ tree), this
-# recompiles default_mp.xex itself -- ppc_mp_tu0/ is generated, never
-# committed -- then builds the multiplayer flavor
+# Builds one game version at a time (`tu` input: tu0 disc, tu6 title update):
+# TU0 recompiles default_mp.xex itself -- ppc_mp_tu0/ is generated, never
+# committed -- TU6 additionally fetches the update package and recompiles the
+# patched executable into ppc_mp/. Both build the multiplayer flavor
 # (-DMW2_TITLE=mp -DMW2_ONLINE=lan, see android/app/build.gradle.kts).
 #
 # Needs two secrets (both masked in logs):
@@ -21,6 +22,12 @@ name: Build MP APK
 
 on:
   workflow_dispatch:
+    inputs:
+      tu:
+        description: "Which game version to build"
+        type: choice
+        options: [tu0, tu6]
+        default: tu0
 
 permissions:
   contents: read
@@ -73,6 +80,14 @@ jobs:
       - name: Fetch libadrenotools
         run: ./android/fetch_deps.sh
 
+      - name: Which game version
+        id: tu
+        run: |
+          tu="${{ github.event.inputs.tu }}"
+          [ -n "$tu" ] || tu="tu0"
+          echo "tu=$tu" >> "$GITHUB_OUTPUT"
+          echo "building $tu"
+
       - name: Fetch the game's executables
         id: fetch
         env:
@@ -100,15 +115,38 @@ jobs:
           # Disc version (TU0): the executables live in mw2/tu0/.
           mkdir -p mw2/tu0
           cp mw2/default.xex mw2/default_mp.xex mw2/tu0/
+          if [ "${{ steps.tu.outputs.tu }}" = "tu6" ]; then
+            # The patch step below only runs when mw2/*.xex are absent: the
+            # fetched disc copies must NOT sit there or the "TU6" build
+            # silently recompiles unpatched disc bytes. Remove them so
+            # xexpatch runs (same guard as Build PC TU6).
+            rm -f mw2/default.xex mw2/default_mp.xex mw2/default.pe mw2/default_mp.pe
+            curl -sSL -H "Authorization: Bearer $MW2_ASSETS_TOKEN" \
+              "https://raw.githubusercontent.com/CyberLifeYT/mw2-assets/main/title-updates/TU6/TU_10LC20N_0000018000000.00000000001GA" \
+              -o tu6.pkg
+            if [ ! -s tu6.pkg ]; then echo "::error::TU6 package did not download."; exit 1; fi
+            echo "TU6 package: $(du -h tu6.pkg | cut -f1)"
+          fi
 
-      - name: Restore the recompiled MP tree
-        id: ppc_cache
+      - name: Restore the recompiled MP tree (tu0)
+        id: ppc_cache_tu0
+        if: steps.tu.outputs.tu == 'tu0'
         uses: actions/cache@v4
         with:
           path: |
             ppc_mp_tu0
             .xex-sha256
           key: ppc-mp-tu0-${{ steps.fetch.outputs.assets_key }}-${{ hashFiles('build.sh', 'patches/**', 'config/MW2MP.tu0.toml', 'tools/genshared.py', 'tools/gen_kernel_stubs.py') }}
+
+      - name: Restore the recompiled MP tree (tu6)
+        id: ppc_cache_tu6
+        if: steps.tu.outputs.tu == 'tu6'
+        uses: actions/cache@v4
+        with:
+          path: |
+            ppc_mp
+            .xex-sha256-tu6
+          key: ppc-mp-tu6-${{ steps.fetch.outputs.assets_key }}-${{ hashFiles('build.sh', 'patches/**', 'config/MW2MP.toml', 'tools/genshared.py', 'tools/gen_kernel_stubs.py') }}
 
       - name: Cache the XenonRecomp build
         uses: actions/cache@v4
@@ -117,10 +155,30 @@ jobs:
           key: xenonrecomp-${{ hashFiles('build.sh', 'patches/**') }}
 
       - name: Recompile the MP executable (disc TU0)
-        if: steps.ppc_cache.outputs.cache-hit != 'true'
+        if: steps.tu.outputs.tu == 'tu0' && steps.ppc_cache_tu0.outputs.cache-hit != 'true'
         run: |
           set -euo pipefail
           VERSION=tu0 RECOMPILE_ONLY=1 TITLE=mp ISO=mw2/game.iso ./build.sh
+
+      - name: Recompile the MP executable (TU6)
+        if: steps.tu.outputs.tu == 'tu6' && steps.ppc_cache_tu6.outputs.cache-hit != 'true'
+        run: |
+          set -euo pipefail
+          VERSION=tu6 RECOMPILE_ONLY=1 TU=$PWD/tu6.pkg TITLE=mp ISO=mw2/game.iso ./build.sh
+
+      - name: Verify the TU patch applied (tu6 only)
+        if: steps.tu.outputs.tu == 'tu6'
+        run: |
+          for x in default default_mp; do
+            disc=$(sha256sum "mw2/tu0/$x.xex" | cut -d' ' -f1)
+            built=$(sha256sum "mw2/$x.xex" | cut -d' ' -f1)
+            echo "$x disc: $disc"
+            echo "$x tu6:  $built"
+            if [ "$disc" = "$built" ]; then
+              echo "::error::$x.xex is byte-identical to the disc: the TU patch did not apply."
+              exit 1
+            fi
+          done
 
       - name: Note the executables' hashes and let go of the game files
         run: |
@@ -137,6 +195,16 @@ jobs:
           fi
           echo "MW2_XEX_SHA256_SP=$sp" >> "$GITHUB_ENV"
           echo "MW2_XEX_SHA256_MP=$mp" >> "$GITHUB_ENV"
+          if [ "${{ steps.tu.outputs.tu }}" = "tu6" ]; then
+            dsp=$(sha256sum mw2/tu0/default.xex | cut -d' ' -f1)
+            dmp=$(sha256sum mw2/tu0/default_mp.xex | cut -d' ' -f1)
+            echo "MW2_DISC_SHA256_SP=$dsp" >> "$GITHUB_ENV"
+            echo "MW2_DISC_SHA256_MP=$dmp" >> "$GITHUB_ENV"
+            echo "MW2_UPDATE_SHA256_PATCH_MP=$(sha256sum mw2/update/patch_mp.ff | cut -d' ' -f1)" >> "$GITHUB_ENV"
+            echo "MW2_UPDATE_SHA256_DLC1_UI_MP=$(sha256sum mw2/update/dlc1_ui_mp.ff | cut -d' ' -f1)" >> "$GITHUB_ENV"
+            echo "MW2_UPDATE_SHA256_DLC2_UI_MP=$(sha256sum mw2/update/dlc2_ui_mp.ff | cut -d' ' -f1)" >> "$GITHUB_ENV"
+            printf '%s %s\n' "$sp" "$mp" > .xex-sha256-tu6
+          fi
           rm -rf mw2
           df -h / | tail -1
 
@@ -145,8 +213,9 @@ jobs:
         id: ccache_restore
         with:
           path: .ccache
-          key: ccache-android-mp-${{ github.run_id }}
+          key: ccache-android-mp-${{ steps.tu.outputs.tu }}-${{ github.run_id }}
           restore-keys: |
+            ccache-android-mp-${{ steps.tu.outputs.tu }}-
             ccache-android-mp-
             ccache-android-
 
@@ -163,10 +232,15 @@ jobs:
           MW2_COMPILER_LAUNCHER: ccache
         run: |
           set -euo pipefail
+          tu="${{ steps.tu.outputs.tu }}"
+          case "$tu" in
+            tu6) variant="MpTu6" ;;
+            *)   variant="MpTu0" ;;
+          esac
           export MW2_BUILD_SHA="${MW2_BUILD_SHA::7}"
           export MW2_BUILD_STAMP="$(date -u '+%Y-%m-%d %H:%M') UTC, run ${{ github.run_number }}"
-          echo "building $MW2_BUILD_SHA ($MW2_BUILD_STAMP)"
-          gradle --no-daemon --stacktrace assembleMultiplayerRelease
+          echo "building $variant ($MW2_BUILD_SHA, $tu)"
+          gradle --no-daemon --stacktrace assemble${variant}Release
           ccache --show-stats || true
 
       - name: Save the compiler cache
@@ -174,29 +248,30 @@ jobs:
         uses: actions/cache/save@v4
         with:
           path: .ccache
-          key: ccache-android-mp-${{ github.run_id }}
+          key: ccache-android-mp-${{ steps.tu.outputs.tu }}-${{ github.run_id }}
 
       - name: Collect the apk
         run: |
           set -euo pipefail
           mkdir -p dist
+          tu="${{ steps.tu.outputs.tu }}"
           stamp=$(date -u +%Y%m%d)
           short=${GITHUB_SHA::7}
           tools=$(ls -d "$ANDROID_HOME"/build-tools/* | sort -V | tail -1)
           echo "::group::what Gradle produced"
           find android/app/build/outputs/apk -name "*.apk" -printf "%s\t%p\n" | sort -k2 || true
           echo "::endgroup::"
-          apk="android/app/build/outputs/apk/multiplayer/release/app-multiplayer-release.apk"
-          if [ ! -f "$apk" ]; then
-            echo "::error::$apk was not built. See the list above for what was."
+          got=$(find android/app/build/outputs/apk -name "*.apk" | head -1)
+          if [ -z "$got" ]; then
+            echo "::error::no APK was built. See the list above for what was."
             exit 1
           fi
-          if ! "$tools/apksigner" verify "$apk" > /dev/null 2>&1; then
-            echo "::error::$apk is not signed; Android would refuse it."
-            "$tools/apksigner" verify --verbose "$apk" || true
+          if ! "$tools/apksigner" verify "$got" > /dev/null 2>&1; then
+            echo "::error::$got is not signed; Android would refuse it."
+            "$tools/apksigner" verify --verbose "$got" || true
             exit 1
           fi
-          cp "$apk" "dist/mw2-multiplayer-android-arm64-$stamp-$short.apk"
+          cp "$got" "dist/mw2-multiplayer-android-arm64-$stamp-$short-$tu.apk"
           (cd dist && sha256sum *.apk > SHA256SUMS.txt)
           ls -la dist
 
@@ -218,7 +293,7 @@ jobs:
 
       - uses: actions/upload-artifact@v4
         with:
-          name: android-mp-apk
+          name: android-mp-apk-${{ steps.tu.outputs.tu }}
           path: dist/*
           retention-days: 14
           if-no-files-found: error
@@ -227,7 +302,7 @@ jobs:
       - name: Say what came out
         run: |
           {
-            echo "### MP build (disc TU0, LAN backend)"
+            echo "### MP build (${{ steps.tu.outputs.tu }}, LAN backend)"
             echo
             echo "build \`${GITHUB_SHA::7}\` (run ${{ github.run_number }})"
             echo

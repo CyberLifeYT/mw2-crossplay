@@ -10,9 +10,13 @@
     <string name="entry_settings">SETTINGS</string>
     <string name="entry_mods">MODS</string>
     <string name="entry_tu6">GET TU6 BUILD</string>
+    <string name="entry_tu0">GET TU0 BUILD</string>
     <string name="mods_detail_phone">Extra maps, weapons and modes for this install\'s game version. Its .ff, .pak and .bik files are copied into the game folder. Scripts and plugins are reported and left alone — this port runs no plugin system.</string>
-    <string name="tu6_detail_phone">Title Update 6 lives in separate PC archives on the releases page. TU6 plays only with TU6, never with this disc-version (TU0) build. Android stays TU0: full TU6 phone builds are future work and have not started.</string>
+    <string name="tu6_detail_phone">Title Update 6, which mods need, as its own app beside this one (MW2 Campaign TU6 / MW2 Multiplayer TU6) on the releases page. TU6 plays only with TU6, never with this disc-version (TU0) build. The TU6 app installs from the same disc, then downloads the update itself.</string>
+    <string name="tu0_detail_phone">The disc-version build, which phones and crossplay started with, as its own app beside this one on the releases page. It plays only with disc-version copies, never with this title-update one.</string>
     <string name="tu6_same_version">Same-version rule: TU0 plays only with TU0, TU6 only with TU6.</string>
+    <string name="tu6_downloading">Downloading title update 6…</string>
+    <string name="tu6_applying">Applying title update 6…</string>
     <string name="tab_graphics">GRAPHICS</string>
     <string name="tab_controls">CONTROLS</string>
     <string name="tab_network">NETWORK</string>

@@ -8,6 +8,11 @@ on:
         type: choice
         options: [campaign]
         default: campaign
+      tu:
+        description: "Which game version to build"
+        type: choice
+        options: [tu0, tu6]
+        default: tu0
       build_type:
         description: "Build variant"
         type: choice
@@ -39,16 +44,28 @@ permissions:
 
 env:
   NDK_VERSION: "28.2.13676358"
+  CCACHE_DIR: ${{ github.workspace }}/.ccache
+  CCACHE_BASEDIR: ${{ github.workspace }}
+  CCACHE_MAXSIZE: 5G
+  CCACHE_COMPILERCHECK: content
+  CCACHE_SLOPPINESS: time_macros,include_file_mtime,include_file_ctime
 
 jobs:
   build:
     name: Build Android APK
-    runs-on: ubuntu-latest
-    timeout-minutes: 60
+    runs-on: ubuntu-24.04
+    timeout-minutes: 355
 
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
+
+      - name: Make room on the disk
+        run: |
+          echo "before:"; df -h / | tail -1
+          sudo rm -rf /usr/share/dotnet /opt/ghc /usr/local/share/boost /usr/share/swift || true
+          sudo apt-get clean
+          echo "after:"; df -h / | tail -1
 
       - name: Set up JDK 17
         uses: actions/setup-java@v4
@@ -59,7 +76,7 @@ jobs:
       - name: Install Toolchain & SIMDe
         run: |
           sudo apt-get update
-          sudo apt-get install -y ninja-build ccache cmake
+          sudo apt-get install -y ninja-build ccache cmake clang-18 lld-18 python3 p7zip-full
           if [ ! -d "XenonRecomp/thirdparty/simde/x86" ]; then
             git clone --depth 1 https://github.com/simd-everywhere/simde.git /tmp/simde-repo
             mkdir -p XenonRecomp/thirdparty/simde
@@ -72,13 +89,113 @@ jobs:
         run: |
           sdkmanager="$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager"
           yes | "$sdkmanager" --licenses > /dev/null 2>&1 || true
-          "$sdkmanager" --install "ndk;$NDK_VERSION" "cmake;3.22.1"
+          "$sdkmanager" --install "ndk;$NDK_VERSION" "platforms;android-35" "build-tools;35.0.0" "cmake;3.22.1"
           echo "ANDROID_NDK_HOME=$ANDROID_HOME/ndk/$NDK_VERSION" >> "$GITHUB_ENV"
 
       - name: Fetch libadrenotools
         run: |
           chmod +x android/fetch_deps.sh
           ./android/fetch_deps.sh
+
+      - name: Which game version
+        id: tu
+        run: |
+          tu="${{ github.event.inputs.tu }}"
+          [ -n "$tu" ] || tu="tu0"
+          echo "tu=$tu" >> "$GITHUB_OUTPUT"
+          echo "building $tu"
+
+      # TU0 campaign builds from the committed ppc/ tree (a TU0 tree) and
+      # needs no game files at all: the hashes below are the disc's known
+      # ones. TU6 fetches the executables + the update and recompiles, exactly
+      # like Build MP APK does for TU0.
+      - name: Fetch the game's executables (tu6 only)
+        id: fetch
+        if: steps.tu.outputs.tu == 'tu6'
+        env:
+          ARCHIVE_URL: ${{ secrets.GAME_ARCHIVE_URL }}
+          MW2_ASSETS_TOKEN: ${{ secrets.MW2_ASSETS_TOKEN }}
+          HTTP_AUTHORIZATION: Bearer ${{ secrets.MW2_ASSETS_TOKEN }}
+        run: |
+          set -euo pipefail
+          if [ -z "$ARCHIVE_URL" ]; then
+            echo "::error::GAME_ARCHIVE_URL secret is empty. See CROSSPLAY.md."
+            exit 1
+          fi
+          if [ -z "${MW2_ASSETS_TOKEN:-}" ]; then
+            echo "::error::MW2_ASSETS_TOKEN secret is empty. See CROSSPLAY.md."
+            exit 1
+          fi
+          case "$ARCHIVE_URL" in
+            *@*) echo "::error::GAME_ARCHIVE_URL must be the PLAIN raw URL; the token goes in MW2_ASSETS_TOKEN."; exit 1 ;;
+          esac
+          echo "::add-mask::$ARCHIVE_URL"
+          python3 tools/fetch_asset.py --into mw2 --github-output \
+            --require default.xex,default_mp.xex "$ARCHIVE_URL"
+          mkdir -p mw2/tu0
+          cp mw2/default.xex mw2/default_mp.xex mw2/tu0/
+          rm -f mw2/default.xex mw2/default_mp.xex mw2/default.pe mw2/default_mp.pe
+          curl -sSL -H "Authorization: Bearer $MW2_ASSETS_TOKEN" \
+            "https://raw.githubusercontent.com/CyberLifeYT/mw2-assets/main/title-updates/TU6/TU_10LC20N_0000018000000.00000000001GA" \
+            -o tu6.pkg
+          if [ ! -s tu6.pkg ]; then echo "::error::TU6 package did not download."; exit 1; fi
+          echo "TU6 package: $(du -h tu6.pkg | cut -f1)"
+
+      - name: Restore the recompiled SP tree (tu6 only)
+        id: ppc_cache
+        if: steps.tu.outputs.tu == 'tu6'
+        uses: actions/cache@v4
+        with:
+          path: |
+            ppc
+            .xex-sha256-tu6
+          key: ppc-sp-tu6-${{ steps.fetch.outputs.assets_key }}-${{ hashFiles('build.sh', 'patches/**', 'config/MW2.toml', 'config/MW2.tu0.toml', 'tools/genshared.py', 'tools/gen_kernel_stubs.py') }}
+
+      - name: Cache the XenonRecomp build (tu6 only)
+        if: steps.tu.outputs.tu == 'tu6'
+        uses: actions/cache@v4
+        with:
+          path: XenonRecomp
+          key: xenonrecomp-${{ hashFiles('build.sh', 'patches/**') }}
+
+      - name: Recompile the SP executable (tu6 only)
+        if: steps.tu.outputs.tu == 'tu6' && steps.ppc_cache.outputs.cache-hit != 'true'
+        run: |
+          set -euo pipefail
+          VERSION=tu6 RECOMPILE_ONLY=1 TU=$PWD/tu6.pkg TITLE=sp ISO=mw2/game.iso ./build.sh
+
+      - name: Note the executables' hashes and let go of the game files
+        run: |
+          set -euo pipefail
+          if [ "${{ steps.tu.outputs.tu }}" = "tu6" ]; then
+            sp=$(sha256sum mw2/default.xex | cut -d' ' -f1)
+            mp=$(sha256sum mw2/default_mp.xex | cut -d' ' -f1)
+            dsp=$(sha256sum mw2/tu0/default.xex | cut -d' ' -f1)
+            dmp=$(sha256sum mw2/tu0/default_mp.xex | cut -d' ' -f1)
+            echo "MW2_XEX_SHA256_SP=$sp" >> "$GITHUB_ENV"
+            echo "MW2_XEX_SHA256_MP=$mp" >> "$GITHUB_ENV"
+            echo "MW2_DISC_SHA256_SP=$dsp" >> "$GITHUB_ENV"
+            echo "MW2_DISC_SHA256_MP=$dmp" >> "$GITHUB_ENV"
+            echo "MW2_UPDATE_SHA256_PATCH_MP=$(sha256sum mw2/update/patch_mp.ff | cut -d' ' -f1)" >> "$GITHUB_ENV"
+            echo "MW2_UPDATE_SHA256_DLC1_UI_MP=$(sha256sum mw2/update/dlc1_ui_mp.ff | cut -d' ' -f1)" >> "$GITHUB_ENV"
+            echo "MW2_UPDATE_SHA256_DLC2_UI_MP=$(sha256sum mw2/update/dlc2_ui_mp.ff | cut -d' ' -f1)" >> "$GITHUB_ENV"
+            printf '%s %s\n' "$sp" "$mp" > .xex-sha256-tu6
+            rm -rf mw2
+          else
+            echo "MW2_XEX_SHA256_SP=990e640d3a92544f9d585e71faf1ab65082d37ec6f5865b2599335fa123bf6ff" >> "$GITHUB_ENV"
+            echo "MW2_XEX_SHA256_MP=aacc47aff3221f3bd9129e80827fd3bcd74aa43bf74bb5c5ddbd0597c0d5fcde" >> "$GITHUB_ENV"
+          fi
+          df -h / | tail -1
+
+      - name: Restore the compiler cache
+        uses: actions/cache/restore@v4
+        id: ccache_restore
+        with:
+          path: .ccache
+          key: ccache-android-sp-${{ steps.tu.outputs.tu }}-${{ github.run_id }}
+          restore-keys: |
+            ccache-android-sp-${{ steps.tu.outputs.tu }}-
+            ccache-android-
 
       - name: Setup Gradle
         uses: gradle/actions/setup-gradle@v4
@@ -90,32 +207,85 @@ jobs:
         env:
           MW2_NDK_VERSION: ${{ env.NDK_VERSION }}
           MW2_BUILD_SHA: ${{ github.sha }}
-          MW2_XEX_SHA256_SP: "990e640d3a92544f9d585e71faf1ab65082d37ec6f5865b2599335fa123bf6ff"
-          MW2_XEX_SHA256_MP: "aacc47aff3221f3bd9129e80827fd3bcd74aa43bf74bb5c5ddbd0597c0d5fcde"
+          MW2_NATIVE_OPTIMISATION: -O2
+          MW2_COMPILER_LAUNCHER: ccache
         run: |
-          case "${{ github.event.inputs.build_type || 'release' }}" in
-            debug)   task="assembleCampaignDebug" ;;
-            *)       task="assembleCampaignRelease" ;;
+          set -euo pipefail
+          tu="${{ steps.tu.outputs.tu }}"
+          case "$tu" in
+            tu6) variant="SpTu6" ;;
+            *)   variant="SpTu0" ;;
           esac
+          case "${{ github.event.inputs.build_type || 'release' }}" in
+            debug) task="assemble${variant}Debug" ;;
+            *)     task="assemble${variant}Release" ;;
+          esac
+          export MW2_BUILD_SHA="${MW2_BUILD_SHA::7}"
+          export MW2_BUILD_STAMP="$(date -u '+%Y-%m-%d %H:%M') UTC, run ${{ github.run_number }}"
+          echo "building $task ($MW2_BUILD_SHA)"
           gradle "$task" --no-daemon --stacktrace
+          ccache --show-stats || true
 
-      - name: Verify APK
+      - name: Save the compiler cache
+        if: always()
+        uses: actions/cache/save@v4
+        with:
+          path: .ccache
+          key: ccache-android-sp-${{ steps.tu.outputs.tu }}-${{ github.run_id }}
+
+      - name: Collect the apk
         run: |
+          set -euo pipefail
+          mkdir -p dist
+          tu="${{ steps.tu.outputs.tu }}"
+          stamp=$(date -u +%Y%m%d)
+          short=${GITHUB_SHA::7}
           tools=$(ls -d "$ANDROID_HOME"/build-tools/* | sort -V | tail -1)
+          echo "::group::what Gradle produced"
+          find android/app/build/outputs/apk -name "*.apk" -printf "%s\t%p\n" | sort -k2 || true
+          echo "::endgroup::"
           case "${{ github.event.inputs.build_type || 'release' }}" in
-            debug)   dir="debug"; apk_name="app-campaign-debug.apk" ;;
-            *)       dir="release"; apk_name="app-campaign-release.apk" ;;
+            debug) dir="debug" ;;
+            *)     dir="release" ;;
           esac
-          apk_path="android/app/build/outputs/apk/campaign/$dir/$apk_name"
-          ls -lh "$apk_path"
-          "$tools/apksigner" verify --verbose "$apk_path"
+          got=$(find android/app/build/outputs/apk -path "*$dir/*.apk" | head -1)
+          if [ -z "$got" ]; then
+            echo "::error::no $dir APK was built. See the list above."
+            exit 1
+          fi
+          if ! "$tools/apksigner" verify "$got" > /dev/null 2>&1; then
+            echo "::error::$got is not signed; Android would refuse it."
+            "$tools/apksigner" verify --verbose "$got" || true
+            exit 1
+          fi
+          cp "$got" "dist/mw2-campaign-android-arm64-$stamp-$short-$tu.apk"
+          (cd dist && sha256sum *.apk > SHA256SUMS.txt)
+          ls -la dist
+
+      - name: Verify the apk
+        run: |
+          set -euo pipefail
+          tools=$(ls -d "$ANDROID_HOME"/build-tools/* | sort -V | tail -1)
+          for apk in dist/*.apk; do
+            echo "::group::$apk"
+            ls -la "$apk"
+            unzip -t "$apk" > /dev/null && echo "zip: intact"
+            "$tools/apksigner" verify --verbose "$apk" || {
+              echo "::error::$apk is not correctly signed"
+              exit 1
+            }
+            "$tools/aapt2" dump badging "$apk" | grep -E "^package:|sdkVersion:|native-code:" || true
+            echo "::endgroup::"
+          done
 
       - name: Upload APK Artifact
         uses: actions/upload-artifact@v4
         with:
-          name: app-campaign-${{ github.event.inputs.build_type || 'release' }}
-          path: android/app/build/outputs/apk/campaign/*/*.apk
+          name: android-sp-apk-${{ steps.tu.outputs.tu }}
+          path: dist/*
           retention-days: 30
+          if-no-files-found: error
+          compression-level: 0
 
       - name: Upload to GitHub Release
         if: github.event_name == 'release' || github.event.inputs.upload_release == true || github.event.inputs.upload_release == 'true' || github.event_name == 'push'
@@ -123,10 +293,19 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           TAG="${{ github.event.release.tag_name || github.event.inputs.release_tag || 'v0.0.1' }}"
-          case "${{ github.event.inputs.build_type || 'release' }}" in
-            debug)   dir="debug"; apk_name="app-campaign-debug.apk" ;;
-            *)       dir="release"; apk_name="app-campaign-release.apk" ;;
-          esac
-          apk_path="android/app/build/outputs/apk/campaign/$dir/$apk_name"
-          echo "Uploading $apk_path to release $TAG..."
-          gh release upload "$TAG" "$apk_path" --clobber -R "${{ github.repository }}" || echo "Release upload skipped (release $TAG may not exist yet or lacks write permissions)"
+          for f in dist/*.apk; do
+            echo "Uploading $f to release $TAG..."
+            gh release upload "$TAG" "$f" --clobber -R "${{ github.repository }}" || echo "Release upload skipped for $f"
+          done
+
+      - name: Say what came out
+        run: |
+          {
+            echo "### Campaign build (${{ steps.tu.outputs.tu }})"
+            echo
+            echo "build \`${GITHUB_SHA::7}\` (run ${{ github.run_number }})"
+            echo
+            echo '```'
+            cat dist/SHA256SUMS.txt
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
