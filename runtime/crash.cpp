@@ -200,6 +200,41 @@ namespace
         {
             ucontext_t* uc = static_cast<ucontext_t*>(uctx);
             const unsigned long long pc = uc->uc_mcontext.pc;
+            // This library's executable range, so code addresses below get a
+            // mark (same /proc/self/maps walk as PrintMapping above).
+            unsigned long long libFrom = 0, libTo = 0;
+            {
+                const int fd = ::open("/proc/self/maps", O_RDONLY);
+                if (fd >= 0)
+                {
+                    char buffer[4096];
+                    std::string held;
+                    ssize_t got;
+                    while ((got = ::read(fd, buffer, sizeof buffer)) > 0)
+                    {
+                        held.append(buffer, size_t(got));
+                        size_t start = 0;
+                        for (;;)
+                        {
+                            const size_t nl = held.find('\n', start);
+                            if (nl == std::string::npos) break;
+                            const std::string line = held.substr(start, nl - start);
+                            start = nl + 1;
+                            unsigned long long from = 0, to = 0;
+                            char perms[8] = {};
+                            if (std::sscanf(line.c_str(), "%llx-%llx %7s", &from, &to, perms) == 3 &&
+                                perms[0] == 'r' && perms[2] == 'x' &&
+                                line.find("libmw2.so") != std::string::npos)
+                            {
+                                libFrom = from;
+                                libTo = to;
+                            }
+                        }
+                        held.erase(0, start);
+                    }
+                    ::close(fd);
+                }
+            }
             std::fprintf(stderr, "[E] fault host pc %016llX on thread %s\n",
                          pc, t_name ? t_name : "?");
             for (int r = 0; r < 30; r += 2)
@@ -210,10 +245,29 @@ namespace
                          (unsigned long long)uc->uc_mcontext.regs[30],
                          (unsigned long long)uc->uc_mcontext.sp);
             std::fflush(stderr);
-            uint32_t word = 0;
-            std::memcpy(&word, reinterpret_cast<const void*>(pc), 4);
-            std::fprintf(stderr, "[E] fault instruction word %08X\n", word);
-            std::fflush(stderr);
+            // The return-address chain survives even when the fault PC is
+            // garbage (as here): any word pointing into this library's code
+            // is a caller and resolves offline. 32-bit words in the guest
+            // code range read as guest callers directly.
+            {
+                const unsigned long long sp = uc->uc_mcontext.sp;
+                std::fprintf(stderr, "[E] stack at %016llX (<= is this library's code):\n", sp);
+                for (int i = 0; i < 64; i++)
+                {
+                    unsigned long long w = 0;
+                    std::memcpy(&w, reinterpret_cast<const void*>(sp + (unsigned long long)i * 8), 8);
+                    const bool inLib = w >= libFrom && w < libTo;
+                    std::fprintf(stderr, "[E]   sp+%03x %016llX%s\n", i * 8, w, inLib ? " <=" : "");
+                }
+                std::fflush(stderr);
+            }
+            if (pc >= libFrom && pc < libTo)
+            {
+                uint32_t word = 0;
+                std::memcpy(&word, reinterpret_cast<const void*>(pc), 4);
+                std::fprintf(stderr, "[E] fault instruction word %08X\n", word);
+                std::fflush(stderr);
+            }
         }
 #endif
         crash::OnFault();
