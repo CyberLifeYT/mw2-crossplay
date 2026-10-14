@@ -342,20 +342,43 @@ namespace
         return true;
     }
 
-    // Through a temporary name, so a file present is a file written whole.
-    bool WriteWhole(const fs::path& to, const std::vector<uint8_t>& bytes, std::string& error)
+    std::mutex g_installLock;
+    Progress* g_installing = nullptr;
+#endif
+}
+
+#ifdef MW2_ANDROID
+namespace install
+{
+    namespace
     {
-        const fs::path partial = fs::path(to) += ".part";
-        std::ofstream out(partial, std::ios::binary | std::ios::trunc);
-        out.write(reinterpret_cast<const char*>(bytes.data()), std::streamsize(bytes.size()));
-        out.close();
-        std::error_code ec;
-        if (out) fs::rename(partial, to, ec);
-        if (!out || ec) { error = "Cannot write " + Utf8(fs::absolute(to)) + " (disk full?)."; return false; }
-        return true;
+        std::string TuSha256(const std::vector<uint8_t>& bytes)
+        {
+            install::crypto::Sha256 hash;
+            hash.Update(bytes.data(), bytes.size());
+            return hash.FinalHex();
+        }
+
+        // Through a temporary name, so a file present is a file written whole.
+        bool TuWriteWhole(const fs::path& to, const std::vector<uint8_t>& bytes, std::string& error)
+        {
+            const fs::path partial = fs::path(to) += ".part";
+            std::ofstream out(partial, std::ios::binary | std::ios::trunc);
+            out.write(reinterpret_cast<const char*>(bytes.data()), std::streamsize(bytes.size()));
+            out.close();
+            std::error_code ec;
+            if (out) fs::rename(partial, to, ec);
+            if (!out || ec) { error = "Cannot write " + install::Utf8(fs::absolute(to)) + " (disk full?)."; return false; }
+            return true;
+        }
     }
 
-    bool install::ApplyTu6(const fs::path& package, std::string& error)
+    // Applies downloaded title update 6 to an installed disc (TU6 builds):
+    // patches both executables in memory exactly as the PC launcher's install
+    // does (launcher/setup.cpp), then lays the update's fastfiles beside the
+    // disc's. Executables go last: both present and patched is what an update
+    // that finished looks like.
+    bool ApplyTu6(const fs::path& package, std::string& error)
     {
 #ifdef MW2_VERSION_TU0
         (void)package;
@@ -390,20 +413,17 @@ namespace
         for (const auto& [name, hash] : kUpdateHashes)
         {
             const auto it = files.find(name);
-            if (it == files.end() || Sha256(it->second) != hash)
+            if (it == files.end() || TuSha256(it->second) != hash)
             {
                 error = std::string("This is not title update 6: its ") + name + " is missing or another version's.";
                 return false;
             }
         }
-        // The disc's executables, patched in memory exactly as the PC
-        // launcher's install does (launcher/setup.cpp), then the update's
-        // fastfiles beside the disc's. Executables go last: both present and
-        // patched is what an update that finished looks like.
         const char* kPatches[][3] = {
             { "default.xex", "default.xexp", MW2_XEX_SHA256_SP },
             { "default_mp.xex", "default_mp.xexp", MW2_XEX_SHA256_MP },
         };
+        const fs::path folder = install::GameFolder();
         std::vector<uint8_t> patched[2];
         for (int i = 0; i < 2; i++)
         {
@@ -415,13 +435,13 @@ namespace
             }
             std::vector<uint8_t> base;
             {
-                std::ifstream in(g_gameFolder / kPatches[i][0], std::ios::binary);
+                std::ifstream in(folder / kPatches[i][0], std::ios::binary);
                 if (!in) { error = "Install the disc first: its executables are not here yet."; return false; }
                 base.assign(std::istreambuf_iterator<char>(in), {});
             }
             const auto result = XexPatcher::apply(base.data(), base.size(), px->second.data(),
                                                   px->second.size(), patched[i], false);
-            if (result != XexPatcher::Result::Success || Sha256(patched[i]) != kPatches[i][2])
+            if (result != XexPatcher::Result::Success || TuSha256(patched[i]) != kPatches[i][2])
             {
                 error = std::string("This is not title update 6: its ") + kPatches[i][1] +
                         " does not make the expected executable.";
@@ -429,19 +449,16 @@ namespace
             }
         }
         for (const auto& [name, hash] : kUpdateHashes)
-            if (!WriteWhole(g_gameFolder / name, files[name], error)) return false;
+            if (!TuWriteWhole(folder / name, files[name], error)) return false;
         for (int i = 0; i < 2; i++)
-            if (!WriteWhole(g_gameFolder / kPatches[i][0], patched[i], error)) return false;
+            if (!TuWriteWhole(folder / kPatches[i][0], patched[i], error)) return false;
         LOGI("install: title update 6 applied");
         return true;
 #endif
 #endif
     }
-
-    std::mutex g_installLock;
-    Progress* g_installing = nullptr;
-#endif
 }
+#endif
 
 bool install::PlayerStart(int argc, char**)
 {

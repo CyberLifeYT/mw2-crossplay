@@ -144,6 +144,7 @@ if(ANDROID)
     # APK must come from CI instead of failing to link.
     set(XENON "${CMAKE_SOURCE_DIR}/XenonRecomp")
     if(EXISTS "${XENON}/XenonUtils/xex_patcher.cpp" AND EXISTS "${XENON}/XenonUtils/xex_patcher.h")
+        enable_language(C)
         list(APPEND RUNTIME_SOURCES
             "${XENON}/XenonUtils/xex_patcher.cpp"
             "${XENON}/XenonUtils/memory_mapped_file.cpp"
