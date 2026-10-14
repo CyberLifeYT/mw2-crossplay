@@ -159,8 +159,7 @@ jobs:
             fi
           done
 
-      - name: Map title.h hooks disc-to-TU6 from the failure
-        # The TU0 title.h blocks are verified (those builds run); several TU6
+      - name: Map title.h hooks disc-to-TU6 from the failure        # The TU0 title.h blocks are verified (those builds run); several TU6
         # addresses are stale for our copies ("use of undeclared identifier
         # 'sub_XXXXXXXX'"). This matches every TU6 hook against the disc
         # executable by its code and prints the corrected #defines. Names and
@@ -168,6 +167,13 @@ jobs:
         if: failure()
         run: |
           python3 tools/map_tu6.py || true
+          # .pdata layouts of both executables, for diffing against the
+          # disc's (tools/pdata_dump.py locally): addresses only. Shows what
+          # the update moved, added or removed around a split function.
+          for title in sp mp; do
+            echo "===== pdata ($title tu6) ====="
+            MW2_TITLE=$title MW2_VERSION=tu6 python3 tools/pdata_dump.py || true
+          done
           # Undeclared goto labels from the failed C++ compile, located in
           # the executable: the analyser split a function it should not have,
           # and the addresses around the label place its true bounds
@@ -359,8 +365,7 @@ jobs:
             fi
           done
 
-      - name: Map title.h hooks disc-to-TU6 from the failure
-        # The TU0 title.h blocks are verified (those builds run); several TU6
+      - name: Map title.h hooks disc-to-TU6 from the failure        # The TU0 title.h blocks are verified (those builds run); several TU6
         # addresses are stale for our copies ("use of undeclared identifier
         # 'sub_XXXXXXXX'"). This matches every TU6 hook against the disc
         # executable by its code and prints the corrected #defines. Names and
@@ -368,6 +373,13 @@ jobs:
         if: failure()
         run: |
           python3 tools/map_tu6.py || true
+          # .pdata layouts of both executables, for diffing against the
+          # disc's (tools/pdata_dump.py locally): addresses only. Shows what
+          # the update moved, added or removed around a split function.
+          for title in sp mp; do
+            echo "===== pdata ($title tu6) ====="
+            MW2_TITLE=$title MW2_VERSION=tu6 python3 tools/pdata_dump.py || true
+          done
           # Undeclared goto labels from the failed C++ compile, located in
           # the executable: the analyser split a function it should not have,
           # and the addresses around the label place its true bounds
