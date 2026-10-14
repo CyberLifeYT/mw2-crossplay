@@ -149,7 +149,8 @@ jobs:
           path: |
             ppc
             .xex-sha256-tu6
-          key: ppc-sp-tu6-${{ steps.fetch.outputs.assets_key }}-${{ hashFiles('build.sh', 'patches/**', 'config/MW2.toml', 'config/MW2.tu0.toml', 'tools/genshared.py', 'tools/gen_kernel_stubs.py') }}
+            .tu6-hashes
+          key: ppc-sp-tu6-h2-${{ steps.fetch.outputs.assets_key }}-${{ hashFiles('build.sh', 'patches/**', 'config/MW2.toml', 'config/MW2.tu0.toml', 'tools/genshared.py', 'tools/gen_kernel_stubs.py') }}
 
       - name: Cache the XenonRecomp build (tu6 only)
         if: steps.tu.outputs.tu == 'tu6'
@@ -168,18 +169,35 @@ jobs:
         run: |
           set -euo pipefail
           if [ "${{ steps.tu.outputs.tu }}" = "tu6" ]; then
-            sp=$(sha256sum mw2/default.xex | cut -d' ' -f1)
-            mp=$(sha256sum mw2/default_mp.xex | cut -d' ' -f1)
-            dsp=$(sha256sum mw2/tu0/default.xex | cut -d' ' -f1)
-            dmp=$(sha256sum mw2/tu0/default_mp.xex | cut -d' ' -f1)
+            # The patched executables + the update's fastfiles exist only
+            # right after a recompile; on a cache hit the hashes come from
+            # the cached file instead. Either way nothing of mw2/ may reach
+            # the APK build below.
+            if [ -f mw2/default.xex ] && [ -f mw2/update/patch_mp.ff ]; then
+              sp=$(sha256sum mw2/default.xex | cut -d' ' -f1)
+              mp=$(sha256sum mw2/default_mp.xex | cut -d' ' -f1)
+              dsp=$(sha256sum mw2/tu0/default.xex | cut -d' ' -f1)
+              dmp=$(sha256sum mw2/tu0/default_mp.xex | cut -d' ' -f1)
+              p=$(sha256sum mw2/update/patch_mp.ff | cut -d' ' -f1)
+              d1=$(sha256sum mw2/update/dlc1_ui_mp.ff | cut -d' ' -f1)
+              d2=$(sha256sum mw2/update/dlc2_ui_mp.ff | cut -d' ' -f1)
+              printf '%s\n' "$sp" "$mp" "$dsp" "$dmp" "$p" "$d1" "$d2" > .tu6-hashes
+              printf '%s %s\n' "$sp" "$mp" > .xex-sha256-tu6
+            elif [ -f .tu6-hashes ]; then
+              sp=$(sed -n 1p .tu6-hashes); mp=$(sed -n 2p .tu6-hashes)
+              dsp=$(sed -n 3p .tu6-hashes); dmp=$(sed -n 4p .tu6-hashes)
+              p=$(sed -n 5p .tu6-hashes); d1=$(sed -n 6p .tu6-hashes); d2=$(sed -n 7p .tu6-hashes)
+            else
+              echo "::error::TU6 files are missing and no hashes were cached."
+              exit 1
+            fi
             echo "MW2_XEX_SHA256_SP=$sp" >> "$GITHUB_ENV"
             echo "MW2_XEX_SHA256_MP=$mp" >> "$GITHUB_ENV"
             echo "MW2_DISC_SHA256_SP=$dsp" >> "$GITHUB_ENV"
             echo "MW2_DISC_SHA256_MP=$dmp" >> "$GITHUB_ENV"
-            echo "MW2_UPDATE_SHA256_PATCH_MP=$(sha256sum mw2/update/patch_mp.ff | cut -d' ' -f1)" >> "$GITHUB_ENV"
-            echo "MW2_UPDATE_SHA256_DLC1_UI_MP=$(sha256sum mw2/update/dlc1_ui_mp.ff | cut -d' ' -f1)" >> "$GITHUB_ENV"
-            echo "MW2_UPDATE_SHA256_DLC2_UI_MP=$(sha256sum mw2/update/dlc2_ui_mp.ff | cut -d' ' -f1)" >> "$GITHUB_ENV"
-            printf '%s %s\n' "$sp" "$mp" > .xex-sha256-tu6
+            echo "MW2_UPDATE_SHA256_PATCH_MP=$p" >> "$GITHUB_ENV"
+            echo "MW2_UPDATE_SHA256_DLC1_UI_MP=$d1" >> "$GITHUB_ENV"
+            echo "MW2_UPDATE_SHA256_DLC2_UI_MP=$d2" >> "$GITHUB_ENV"
             rm -rf mw2
           else
             echo "MW2_XEX_SHA256_SP=990e640d3a92544f9d585e71faf1ab65082d37ec6f5865b2599335fa123bf6ff" >> "$GITHUB_ENV"
