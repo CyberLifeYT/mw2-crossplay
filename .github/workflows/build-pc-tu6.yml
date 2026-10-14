@@ -167,6 +167,20 @@ jobs:
         if: failure()
         run: |
           python3 tools/map_tu6.py || true
+          # Undeclared goto labels from the failed C++ compile, located in
+          # the executable: the analyser split a function it should not have,
+          # and the addresses around the label place its true bounds
+          # (config/*.toml `functions`). Addresses only, no game data.
+          for title in sp mp; do
+            log="logs-recomp-$title-tu6.txt"
+            [ -f "$log" ] || continue
+            labels=$(grep -o "loc_[0-9A-Fa-f]*" "$log" 2>/dev/null | sort -u | sed 's/^loc_/0x/' || true)
+            if [ -n "$labels" ]; then
+              echo "===== undeclared labels ($title) ====="
+              # shellcheck disable=SC2086
+              MW2_TITLE=$title MW2_VERSION=tu6 python3 tools/bracket.py $labels || true
+            fi
+          done
 
       - name: Save the compiler cache
         if: always()
@@ -336,6 +350,20 @@ jobs:
         if: failure()
         run: |
           python3 tools/map_tu6.py || true
+          # Undeclared goto labels from the failed C++ compile, located in
+          # the executable: the analyser split a function it should not have,
+          # and the addresses around the label place its true bounds
+          # (config/*.toml `functions`). Addresses only, no game data.
+          for title in sp mp; do
+            log="logs-recomp-$title-tu6.txt"
+            [ -f "$log" ] || continue
+            labels=$(grep -o "loc_[0-9A-Fa-f]*" "$log" 2>/dev/null | sort -u | sed 's/^loc_/0x/' || true)
+            if [ -n "$labels" ]; then
+              echo "===== undeclared labels ($title) ====="
+              # shellcheck disable=SC2086
+              MW2_TITLE=$title MW2_VERSION=tu6 python3 tools/bracket.py $labels || true
+            fi
+          done
 
       - name: Save the compiler cache
         if: always()
