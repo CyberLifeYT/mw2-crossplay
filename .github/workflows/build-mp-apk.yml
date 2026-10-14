@@ -336,6 +336,20 @@ jobs:
             echo "::endgroup::"
           done
 
+      # Symbol map of the shipped library: function names + addresses only
+      # (no game content, same class as the existing diagnostics). Lets the
+      # next device crash log resolve to the exact function offline.
+      - name: Upload symbol map
+        run: |
+          set -euo pipefail
+          mkdir -p dist
+          lib=$(find android/app/build -path "*obj*arm64-v8a/libmw2.so" | head -1)
+          if [ -z "$lib" ]; then lib=$(find android/app/build -path "*arm64-v8a/libmw2.so" | head -1); fi
+          echo "unstripped library: $lib"
+          "$ANDROID_NDK_HOME/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-nm" -n "$lib" > "dist/symbols-${{ steps.tu.outputs.tu }}.txt" || true
+          grep -c " sub_" "dist/symbols-${{ steps.tu.outputs.tu }}.txt" || true
+          ls -la dist
+
       - uses: actions/upload-artifact@v4
         with:
           name: android-mp-apk-${{ steps.tu.outputs.tu }}
