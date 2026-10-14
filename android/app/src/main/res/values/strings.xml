@@ -7,6 +7,16 @@
     <string name="disclaimer">UNOFFICIAL. NOT AFFILIATED WITH ACTIVISION, INFINITY WARD OR MICROSOFT.</string>
     <string name="hint_choose">TAP TO CHOOSE</string>
     <string name="network_settings">NETWORK</string>
+    <string name="entry_settings">SETTINGS</string>
+    <string name="entry_mods">MODS</string>
+    <string name="entry_tu6">GET TU6 BUILD</string>
+    <string name="mods_detail_phone">Extra maps, weapons and modes for this install\'s game version. Its .ff, .pak and .bik files are copied into the game folder. Scripts and plugins are reported and left alone — this port runs no plugin system.</string>
+    <string name="tu6_detail_phone">Title Update 6 lives in separate PC archives on the releases page. TU6 plays only with TU6, never with this disc-version (TU0) build. Android stays TU0: full TU6 phone builds are future work and have not started.</string>
+    <string name="tu6_same_version">Same-version rule: TU0 plays only with TU0, TU6 only with TU6.</string>
+    <string name="tab_graphics">GRAPHICS</string>
+    <string name="tab_controls">CONTROLS</string>
+    <string name="tab_network">NETWORK</string>
+    <string name="tab_files">FILES</string>
     <string name="check_updates">CHECK FOR UPDATES</string>
     <string name="quit_launcher">QUIT</string>
     <string name="up_to_date">This is the newest version.</string>

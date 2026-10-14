@@ -41,6 +41,8 @@ class MainActivity : AppCompatActivity() {
     private lateinit var play: Button
     private lateinit var installButton: Button
     private lateinit var otherAppButton: Button
+    private lateinit var modsButton: Button
+    private lateinit var tu6Button: Button
     private lateinit var updatesButton: Button
     private lateinit var quitButton: Button
     private lateinit var detailTitle: TextView
@@ -72,6 +74,8 @@ class MainActivity : AppCompatActivity() {
         play = findViewById(R.id.play)
         installButton = findViewById(R.id.install)
         otherAppButton = findViewById(R.id.other_app)
+        modsButton = findViewById(R.id.entry_mods)
+        tu6Button = findViewById(R.id.entry_tu6)
         updatesButton = findViewById(R.id.entry_updates)
         quitButton = findViewById(R.id.entry_quit)
         detailTitle = findViewById(R.id.detail_title)
@@ -79,8 +83,11 @@ class MainActivity : AppCompatActivity() {
         versionTag = findViewById(R.id.version_tag)
         directLaunchSwitch = findViewById(R.id.direct_launch_switch)
         try {
-            val name = packageManager.getPackageInfo(packageName, 0).versionName ?: ""
-            versionTag.text = "$name · DISC VERSION 1.0.557"
+            val info = packageManager.getPackageInfo(packageName, 0)
+            val name = info.versionName ?: ""
+            val code = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) info.longVersionCode.toInt()
+            else info.versionCode
+            versionTag.text = "$name · vcode $code · TU0 · DISC VERSION 1.0.557"
         } catch (_: Throwable) {
         }
 
@@ -139,6 +146,20 @@ class MainActivity : AppCompatActivity() {
             select(it as Button)
             showDetail(getString(R.string.view_log), "")
             showLog()
+        }
+        modsButton.setOnClickListener {
+            select(modsButton)
+            showDetail(getString(R.string.entry_mods), getString(R.string.mods_detail_phone))
+            startActivity(
+                Intent(this, SettingsActivity::class.java).apply {
+                    putExtra(SettingsActivity.EXTRA_TAB, SettingsActivity.TAB_FILES)
+                },
+            )
+        }
+        tu6Button.setOnClickListener {
+            select(tu6Button)
+            showDetail(getString(R.string.entry_tu6), getString(R.string.tu6_detail_phone))
+            openReleasesPage()
         }
         updatesButton.setOnClickListener {
             select(updatesButton)
@@ -510,6 +531,11 @@ class MainActivity : AppCompatActivity() {
             startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(page)))
         } catch (_: Throwable) {
         }
+    }
+
+    /** TU6 lives in separate PC archives; Android stays TU0 (future work, not started). */
+    private fun openReleasesPage() {
+        openPage("https://github.com/CyberLifeYT/mw2-crossplay/releases")
     }
 
     private fun downloadAndInstall(apkUrl: String) {

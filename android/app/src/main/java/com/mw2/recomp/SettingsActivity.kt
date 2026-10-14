@@ -22,7 +22,17 @@ import kotlin.math.roundToInt
  */
 class SettingsActivity : AppCompatActivity() {
 
+    companion object {
+        const val EXTRA_TAB = "mw2.tab"
+        const val TAB_GRAPHICS = 0
+        const val TAB_CONTROLS = 1
+        const val TAB_NETWORK = 2
+        const val TAB_FILES = 3
+    }
+
     private lateinit var prefs: Prefs
+    private val tabButtons = mutableListOf<Button>()
+    private val tabPages = mutableListOf<android.view.View>()
 
     private val modBrowse = registerForActivityResult(
         ActivityResultContracts.StartActivityForResult(),
@@ -38,6 +48,20 @@ class SettingsActivity : AppCompatActivity() {
         setContentView(R.layout.activity_settings)
         prefs = Prefs(this)
         title = getString(R.string.settings)
+
+        // ---- tab bar (plain views, no new deps): one page visible at a time ----
+        tabButtons.add(findViewById(R.id.tab_graphics))
+        tabButtons.add(findViewById(R.id.tab_controls))
+        tabButtons.add(findViewById(R.id.tab_network))
+        tabButtons.add(findViewById(R.id.tab_files))
+        tabPages.add(findViewById(R.id.page_graphics))
+        tabPages.add(findViewById(R.id.page_controls))
+        tabPages.add(findViewById(R.id.page_network))
+        tabPages.add(findViewById(R.id.page_files))
+        tabButtons.forEachIndexed { index, button ->
+            button.setOnClickListener { selectTab(index) }
+        }
+        selectTab(intent.getIntExtra(EXTRA_TAB, TAB_GRAPHICS).coerceIn(0, 3))
 
         // ---- picture ----
         val resolutionLabel: TextView = findViewById(R.id.resolution_label)
@@ -170,6 +194,22 @@ class SettingsActivity : AppCompatActivity() {
         }
         findViewById<Button>(R.id.install_mods).setOnClickListener {
             modBrowse.launch(Intent(this, FileBrowserActivity::class.java))
+        }
+    }
+
+    /** Custom tab bar: black-bar highlight on the chosen tab, one page shown. */
+    private fun selectTab(index: Int) {
+        tabPages.forEachIndexed { i, page ->
+            page.visibility = if (i == index) android.view.View.VISIBLE else android.view.View.GONE
+        }
+        tabButtons.forEachIndexed { i, button ->
+            if (i == index) {
+                button.setBackgroundResource(R.drawable.bg_entry_selected)
+                button.setTextColor(0xFFE8B234.toInt())
+            } else {
+                button.setBackgroundColor(android.graphics.Color.TRANSPARENT)
+                button.setTextColor(0xFFE8EAED.toInt())
+            }
         }
     }
 

@@ -51,7 +51,7 @@ android {
         // Bump EVERY published release: Android refuses to install an update
         // whose versionCode is at or below the installed one. CI may set
         // MW2_VERSION_CODE instead of editing this file.
-        versionCode = setting("MW2_VERSION_CODE")?.toIntOrNull() ?: 12
+        versionCode = setting("MW2_VERSION_CODE")?.toIntOrNull() ?: 13
         // Which build this is, carried inside the apk. "The wrong apk" has
         // cost more than one evening, and every time the only way to settle
         // it was to guess. The launcher shows this and Android's app info
