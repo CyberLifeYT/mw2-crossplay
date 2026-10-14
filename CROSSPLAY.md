@@ -94,8 +94,9 @@ Every update ships through CI; skip only components whose code did not change:
    native lib ships inside the APK).
 2. Push: `Build Android APK` (campaign TU0) runs itself; dispatch it again
    with `tu: tu6`, plus `Build MP APK` with `tu: tu0` and `tu: tu6`.
-   (Two flavor dimensions now: variant tasks are `assembleSpTu0Release`,
-   `assembleSpTu6Release`, `assembleMpTu0Release`, `assembleMpTu6Release`.)
+   (Two flavor dimensions now: variant tasks are `assembleCampaignTu0Release`,
+   `assembleCampaignTu6Release`, `assembleMultiplayerTu0Release`,
+   `assembleMultiplayerTu6Release`.)
 3. New tag (`v0.1.0-alpha.N`), pre-release, with notes. Notes MUST carry an
    `APK versionCode: N` line — the in-app updater reads it.
 4. Dispatch `Build PC TU0` and `Build PC TU6` with that tag: they attach the
@@ -186,11 +187,11 @@ VERSION=tu0 RECOMPILE_ONLY=1 TITLE=mp ISO="<path-to-your.iso>" ./build.sh
 # 2. adrenotools (Turnip driver support, optional)
 ./android/fetch_deps.sh
 
-# 3. APKs (TU flavor second: SpTu0/SpTu6/MpTu0/MpTu6 + Debug/Release)
+# 3. APKs (TU flavor second: CampaignTu0/CampaignTu6/MultiplayerTu0/MultiplayerTu6 + Debug/Release)
 cd android
-./gradlew assembleSpTu0Release assembleMpTu0Release
-# -> app/build/outputs/apk/spTu0/release/*.apk
-# -> app/build/outputs/apk/mpTu0/release/*.apk
+./gradlew assembleCampaignTu0Release assembleMultiplayerTu0Release
+# -> app/build/outputs/apk/campaignTu0/release/*.apk
+# -> app/build/outputs/apk/multiplayerTu0/release/*.apk
 ```
 
 PC (same tree, TU0 + LAN for crossplay):

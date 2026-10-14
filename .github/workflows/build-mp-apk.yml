@@ -234,8 +234,8 @@ jobs:
           set -euo pipefail
           tu="${{ steps.tu.outputs.tu }}"
           case "$tu" in
-            tu6) variant="MpTu6" ;;
-            *)   variant="MpTu0" ;;
+            tu6) variant="MultiplayerTu6" ;;
+            *)   variant="MultiplayerTu0" ;;
           esac
           export MW2_BUILD_SHA="${MW2_BUILD_SHA::7}"
           export MW2_BUILD_STAMP="$(date -u '+%Y-%m-%d %H:%M') UTC, run ${{ github.run_number }}"

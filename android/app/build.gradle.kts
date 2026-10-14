@@ -110,8 +110,9 @@ android {
     // only with TU0, TU6 only with TU6): the second dimension. TU0 keeps the
     // original packages (com.mw2.recomp.sp/.mp) so updates install over it;
     // TU6 rides beside them as .sp.tu6/.mp.tu6. Variant tasks are therefore
-    // assembleSpTu0Release, assembleSpTu6Release, assembleMpTu0Release and
-    // assembleMpTu6Release (see .github/workflows/build-apk.yml).
+    // assembleCampaignTu0Release, assembleCampaignTu6Release,
+    // assembleMultiplayerTu0Release and assembleMultiplayerTu6Release
+    // (see .github/workflows/build-apk.yml).
     flavorDimensions += "title"
     flavorDimensions += "tu"
     productFlavors {

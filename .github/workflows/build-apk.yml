@@ -213,8 +213,8 @@ jobs:
           set -euo pipefail
           tu="${{ steps.tu.outputs.tu }}"
           case "$tu" in
-            tu6) variant="SpTu6" ;;
-            *)   variant="SpTu0" ;;
+            tu6) variant="CampaignTu6" ;;
+            *)   variant="CampaignTu0" ;;
           esac
           case "${{ github.event.inputs.build_type || 'release' }}" in
             debug) task="assemble${variant}Debug" ;;
