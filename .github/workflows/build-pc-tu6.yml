@@ -180,6 +180,14 @@ jobs:
               echo "===== undeclared labels ($title) ====="
               # shellcheck disable=SC2086
               MW2_TITLE=$title MW2_VERSION=tu6 python3 tools/bracket.py $labels || true
+              # Branch structure around each label: what the analyser saw and
+              # where it cut. Same addresses-only rule as above.
+              for label in $labels; do
+                lo=$(printf '0x%X' $(($label - 0x40)))
+                hi=$(printf '0x%X' $(($label + 0x28)))
+                echo "----- flow around $label -----"
+                MW2_TITLE=$title MW2_VERSION=tu6 python3 tools/bracket.py --flow $lo $hi || true
+              done
             fi
           done
 
@@ -364,6 +372,14 @@ jobs:
               echo "===== undeclared labels ($title) ====="
               # shellcheck disable=SC2086
               MW2_TITLE=$title MW2_VERSION=tu6 python3 tools/bracket.py $labels || true
+              # Branch structure around each label: what the analyser saw and
+              # where it cut. Same addresses-only rule as above.
+              for label in $labels; do
+                lo=$(printf '0x%X' $(($label - 0x40)))
+                hi=$(printf '0x%X' $(($label + 0x28)))
+                echo "----- flow around $label -----"
+                MW2_TITLE=$title MW2_VERSION=tu6 python3 tools/bracket.py --flow $lo $hi || true
+              done
             fi
           done
 

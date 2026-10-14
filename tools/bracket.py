@@ -20,6 +20,50 @@ import title
 BASE = title.BASE
 
 
+def flow_map(img, start, end):
+    """Control-flow structure of an address range: branches, calls, returns
+    and padding, as addresses only. Enough to place an explicit function
+    bound around a construct the analyser split wrongly."""
+
+    def w(a):
+        return struct.unpack_from(">I", img, a - BASE)[0]
+
+    def target(addr, v, bits):
+        if v & (1 << (bits - 1)):
+            v -= 1 << bits
+        return v
+
+    a = start
+    while a < end:
+        x = w(a)
+        if x == 0:
+            b = a
+            while b < end and w(b) == 0:
+                b += 4
+            print(f"  0x{a:08X}..0x{b:04X} pad")
+            a = b
+            continue
+        op = x >> 26
+        aa, lk = x & 2, x & 1
+        if op == 18:                                  # b, bl
+            li = x & 0x03FFFFFC
+            t = target(a, li, 26) if aa else a + target(a, li, 26)
+            print(f"  0x{a:08X} {'bl' if lk else 'b'} -> 0x{t:08X}")
+        elif op == 16:                                # bc
+            bo, bi = (x >> 21) & 31, (x >> 16) & 31
+            bd = x & 0xFFFC
+            t = target(a, bd, 16) if aa else a + target(a, bd, 16)
+            ctr = "ctr?" if ((bo >> 2) & 1) == 0 else "-"
+            print(f"  0x{a:08X} bc(BO={bo},BI={bi},{ctr}) -> 0x{t:08X}{' +link' if lk else ''}")
+        elif op == 19:                                # bclr/bcctr/...
+            xo = (x >> 1) & 0x3FF
+            what = {16: "bclr", 528: "bcctr"}.get(xo, f"op19/{xo}")
+            print(f"  0x{a:08X} {what}{'+link' if lk else ''}")
+        else:
+            print(f"  0x{a:08X} ...")
+        a += 4
+
+
 def starts_of(img):
     TVA, TSZ = title.text(img)
 
@@ -44,7 +88,21 @@ def starts_of(img):
 
 
 def main():
+    args = sys.argv[1:]
+    flow = None
+    addrs = []
+    while args:
+        a = args.pop(0)
+        if a == "--flow":
+            start = int(args.pop(0), 16)
+            end = int(args.pop(0), 16)
+            flow = (start, end)
+        else:
+            addrs.append(a)
     img = title.image()
+    if flow is not None:
+        flow_map(img, *flow)
+        return
     starts, fns = starts_of(img)
     for arg in sys.argv[1:]:
         a = int(arg, 16)
