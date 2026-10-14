@@ -41,8 +41,11 @@ class MainActivity : AppCompatActivity() {
     private lateinit var play: Button
     private lateinit var installButton: Button
     private lateinit var otherAppButton: Button
+    private lateinit var updatesButton: Button
+    private lateinit var quitButton: Button
     private lateinit var detailTitle: TextView
     private lateinit var detailText: TextView
+    private lateinit var versionTag: TextView
     private lateinit var directLaunchSwitch: androidx.appcompat.widget.SwitchCompat
     private var detectedIsoFile: File? = null
     private var nativeReady = false
@@ -69,9 +72,17 @@ class MainActivity : AppCompatActivity() {
         play = findViewById(R.id.play)
         installButton = findViewById(R.id.install)
         otherAppButton = findViewById(R.id.other_app)
+        updatesButton = findViewById(R.id.entry_updates)
+        quitButton = findViewById(R.id.entry_quit)
         detailTitle = findViewById(R.id.detail_title)
         detailText = findViewById(R.id.detail_text)
+        versionTag = findViewById(R.id.version_tag)
         directLaunchSwitch = findViewById(R.id.direct_launch_switch)
+        try {
+            val name = packageManager.getPackageInfo(packageName, 0).versionName ?: ""
+            versionTag.text = "$name · DISC VERSION 1.0.557"
+        } catch (_: Throwable) {
+        }
 
         directLaunchSwitch.isChecked = prefs.autoLaunch
         directLaunchSwitch.setOnCheckedChangeListener { _, isChecked ->
@@ -79,6 +90,7 @@ class MainActivity : AppCompatActivity() {
         }
 
         play.setOnClickListener {
+            select(play)
             showDetail(getString(R.string.play), status.text.toString())
             val gameDirectory = prefs.gameDirectory
             val installed = gameDirectory.isNotEmpty() && safely(false) {
@@ -98,8 +110,12 @@ class MainActivity : AppCompatActivity() {
         }
         // The other half of the game, when it is installed: campaign jumps
         // straight into multiplayer and back, no home screen in between.
-        otherAppButton.setOnClickListener { launchOtherApp() }
+        otherAppButton.setOnClickListener {
+            select(otherAppButton)
+            launchOtherApp()
+        }
         installButton.setOnClickListener {
+            select(installButton)
             showDetail(
                 getString(R.string.install_game),
                 getString(R.string.install_hint),
@@ -107,6 +123,7 @@ class MainActivity : AppCompatActivity() {
             startActivity(Intent(this, InstallActivity::class.java))
         }
         findViewById<Button>(R.id.driver).setOnClickListener {
+            select(it as Button)
             showDetail(
                 getString(R.string.graphics_driver),
                 getString(R.string.driver_hint),
@@ -114,12 +131,23 @@ class MainActivity : AppCompatActivity() {
             startActivity(Intent(this, DriverActivity::class.java))
         }
         findViewById<Button>(R.id.settings).setOnClickListener {
-            showDetail(getString(R.string.settings), "")
+            select(it as Button)
+            showDetail(getString(R.string.network_settings), getString(R.string.player_name_hint))
             startActivity(Intent(this, SettingsActivity::class.java))
         }
         findViewById<Button>(R.id.log).setOnClickListener {
+            select(it as Button)
             showDetail(getString(R.string.view_log), "")
             showLog()
+        }
+        updatesButton.setOnClickListener {
+            select(updatesButton)
+            showDetail(getString(R.string.check_updates), "")
+            checkForUpdates(manual = true)
+        }
+        quitButton.setOnClickListener {
+            select(quitButton)
+            finishAndRemoveTask()
         }
 
         // Whatever killed the app last time, shown before anything else is
@@ -391,9 +419,19 @@ class MainActivity : AppCompatActivity() {
             .show()
     }
 
+    private var selectedEntry: Button? = null
+
+    /** The PC launcher's black-bar highlight on the chosen entry. */
+    private fun select(entry: Button) {
+        selectedEntry?.setBackgroundColor(android.graphics.Color.TRANSPARENT)
+        selectedEntry = entry
+        entry.setBackgroundResource(R.drawable.bg_entry_selected)
+    }
+
     /** A newer published APK, if there is one: silent when offline. */
-    private fun checkForUpdates() {
+    private fun checkForUpdates(manual: Boolean = false) {
         thread(name = "update-check", isDaemon = true) {
+            var offered = false
             try {
                 val connection = (URL("https://api.github.com/repos/CyberLifeYT/mw2-crossplay/releases?per_page=10")
                     .openConnection() as HttpURLConnection).apply {
@@ -401,39 +439,49 @@ class MainActivity : AppCompatActivity() {
                     readTimeout = 15000
                     setRequestProperty("Accept", "application/vnd.github+json")
                 }
-                if (connection.responseCode != 200) return@thread
-                val releases = JSONArray(connection.inputStream.bufferedReader().readText())
-                val want = if (packageName.endsWith(".mp")) "multiplayer" else "campaign"
-                for (i in 0 until releases.length()) {
-                    val release = releases.getJSONObject(i)
-                    if (release.optBoolean("draft")) continue
-                    val assets = release.optJSONArray("assets") ?: continue
-                    val matches = (0 until assets.length()).any {
-                        assets.getJSONObject(it).optString("name").contains(want, ignoreCase = true)
+                if (connection.responseCode == 200) {
+                    val releases = JSONArray(connection.inputStream.bufferedReader().readText())
+                    val want = if (packageName.endsWith(".mp")) "multiplayer" else "campaign"
+                    for (i in 0 until releases.length()) {
+                        val release = releases.getJSONObject(i)
+                        if (release.optBoolean("draft")) continue
+                        val assets = release.optJSONArray("assets") ?: continue
+                        val matches = (0 until assets.length()).any {
+                            assets.getJSONObject(it).optString("name").contains(want, ignoreCase = true)
+                        }
+                        if (!matches) continue
+                        val tag = release.optString("tag_name")
+                        val code = Regex("APK versionCode:\\s*(\\d+)")
+                            .find(release.optString("body"))?.groupValues?.get(1)?.toIntOrNull() ?: 0
+                        val installed = packageManager.getPackageInfo(packageName, 0).let {
+                            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) it.longVersionCode.toInt()
+                            else it.versionCode
+                        }
+                        // Newest matching release only: older ones stay buried.
+                        if (code > installed && tag.isNotEmpty() && tag != prefs.seenUpdateTag) {
+                            val page = release.optString("html_url")
+                            val apkUrl = (0 until assets.length())
+                                .map { assets.getJSONObject(it) }
+                                .firstOrNull {
+                                    it.optString("name").endsWith(".apk", ignoreCase = true) &&
+                                        it.optString("name").contains(want, ignoreCase = true)
+                                }?.optString("browser_download_url") ?: ""
+                            val notes = release.optString("body").take(1500)
+                            offered = true
+                            runOnUiThread { showUpdateDialog(tag, page, apkUrl, notes, installed, code) }
+                        }
+                        break
                     }
-                    if (!matches) continue
-                    val tag = release.optString("tag_name")
-                    val code = Regex("APK versionCode:\\s*(\\d+)")
-                        .find(release.optString("body"))?.groupValues?.get(1)?.toIntOrNull() ?: 0
-                    val installed = packageManager.getPackageInfo(packageName, 0).let {
-                        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) it.longVersionCode.toInt()
-                        else it.versionCode
-                    }
-                    // Newest matching release only: older ones stay buried.
-                    if (code > installed && tag.isNotEmpty() && tag != prefs.seenUpdateTag) {
-                        val page = release.optString("html_url")
-                        val apkUrl = (0 until assets.length())
-                            .map { assets.getJSONObject(it) }
-                            .firstOrNull {
-                                it.optString("name").endsWith(".apk", ignoreCase = true) &&
-                                    it.optString("name").contains(want, ignoreCase = true)
-                            }?.optString("browser_download_url") ?: ""
-                        val notes = release.optString("body").take(1500)
-                        runOnUiThread { showUpdateDialog(tag, page, apkUrl, notes, installed, code) }
-                    }
-                    return@thread
                 }
             } catch (_: Throwable) {
+            }
+            if (manual && !offered) {
+                runOnUiThread {
+                    AlertDialog.Builder(this)
+                        .setMessage(R.string.up_to_date)
+                        .setPositiveButton(R.string.close, null)
+                        .show()
+                }
             }
         }
     }

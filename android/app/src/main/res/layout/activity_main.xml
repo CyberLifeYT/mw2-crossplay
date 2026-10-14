@@ -1,227 +1,330 @@
 <?xml version="1.0" encoding="utf-8"?>
-<ScrollView xmlns:android="http://schemas.android.com/apk/res/android"
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:tools="http://schemas.android.com/tools"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:fillViewport="true"
-    android:background="#090D12">
+    android:background="#141417">
 
-    <LinearLayout
+    <com.mw2.recomp.BackdropView
         android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:orientation="vertical"
-        android:paddingStart="20dp"
-        android:paddingEnd="20dp"
-        android:paddingTop="24dp"
-        android:paddingBottom="24dp">
+        android:layout_height="match_parent" />
 
-        <!-- Wordmark header, after the PC launcher's title block -->
+    <ScrollView
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:fillViewport="true">
+
         <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:gravity="center_vertical"
-            android:orientation="horizontal">
-
-            <ImageView
-                android:layout_width="52dp"
-                android:layout_height="52dp"
-                android:src="@mipmap/ic_launcher"
-                android:contentDescription="@string/app_name" />
-
-            <LinearLayout
-                android:layout_width="0dp"
-                android:layout_height="wrap_content"
-                android:layout_weight="1"
-                android:layout_marginStart="14dp"
-                android:orientation="vertical">
-
-                <TextView
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:text="@string/wordmark"
-                    android:textColor="#F0F6FC"
-                    android:textSize="20sp"
-                    android:fontFamily="sans-serif-black"
-                    android:letterSpacing="0.04" />
-
-                <TextView
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:layout_marginTop="2dp"
-                    android:text="@string/app_name"
-                    android:textColor="#8B949E"
-                    android:textSize="12sp"
-                    android:fontFamily="sans-serif-medium" />
-            </LinearLayout>
+            android:minHeight="480dp"
+            android:orientation="vertical"
+            android:paddingStart="20dp"
+            android:paddingEnd="20dp"
+            android:paddingTop="14dp"
+            android:paddingBottom="16dp">
 
             <TextView
-                android:layout_width="wrap_content"
+                android:id="@+id/version_tag"
+                android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:background="@drawable/bg_pill_badge"
-                android:paddingStart="10dp"
-                android:paddingEnd="10dp"
-                android:paddingTop="4dp"
-                android:paddingBottom="4dp"
-                android:text="ARM64"
-                android:textColor="#34D399"
+                android:gravity="end"
+                android:textColor="#8B949E"
                 android:textSize="10sp"
-                android:fontFamily="sans-serif-black"
-                android:letterSpacing="0.08" />
-        </LinearLayout>
-
-        <!-- Entries (left) + detail pane (right), like the PC launcher -->
-        <LinearLayout
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="20dp"
-            android:orientation="horizontal">
+                android:fontFamily="sans-serif"
+                tools:text="v0.1.0-alpha.10 · DISC VERSION 1.0.557" />
 
             <LinearLayout
-                android:layout_width="0dp"
+                android:layout_width="match_parent"
                 android:layout_height="wrap_content"
+                android:layout_marginTop="18dp"
                 android:layout_weight="1"
-                android:layout_marginEnd="7dp"
-                android:orientation="vertical">
+                android:orientation="horizontal">
 
-                <Button
-                    android:id="@+id/play"
-                    android:layout_width="match_parent"
+                <LinearLayout
+                    android:layout_width="0dp"
                     android:layout_height="wrap_content"
-                    android:minHeight="60dp"
-                    android:background="@drawable/bg_button_play"
-                    android:text="@string/play"
-                    android:textColor="#FFFFFF"
-                    android:textSize="16sp"
-                    android:fontFamily="sans-serif-black"
-                    android:letterSpacing="0.08"
-                    android:stateListAnimator="@null" />
+                    android:layout_weight="1"
+                    android:layout_marginEnd="10dp"
+                    android:orientation="vertical">
 
-                <Button
-                    android:id="@+id/other_app"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:layout_marginTop="10dp"
-                    android:minHeight="48dp"
-                    android:background="@drawable/bg_button_action"
-                    android:textColor="#C9D1D9"
-                    android:textSize="13sp"
-                    android:fontFamily="sans-serif-medium"
-                    android:stateListAnimator="@null" />
+                    <Button
+                        android:id="@+id/play"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:minHeight="46dp"
+                        android:background="@android:color/transparent"
+                        android:gravity="end|center_vertical"
+                        android:text="@string/play"
+                        android:textColor="#FFFFFF"
+                        android:textSize="16sp"
+                        android:fontFamily="sans-serif-condensed"
+                        android:letterSpacing="0.12"
+                        android:stateListAnimator="@null" />
 
-                <Button
-                    android:id="@+id/install"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:layout_marginTop="10dp"
-                    android:minHeight="48dp"
-                    android:background="@drawable/bg_button_action"
-                    android:textColor="#C9D1D9"
-                    android:text="@string/install_game"
-                    android:textSize="13sp"
-                    android:fontFamily="sans-serif-medium"
-                    android:stateListAnimator="@null" />
+                    <Button
+                        android:id="@+id/other_app"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:minHeight="46dp"
+                        android:background="@android:color/transparent"
+                        android:gravity="end|center_vertical"
+                        android:textColor="#E8EAED"
+                        android:textSize="15sp"
+                        android:fontFamily="sans-serif-condensed"
+                        android:letterSpacing="0.12"
+                        android:stateListAnimator="@null" />
 
-                <Button
-                    android:id="@+id/driver"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:layout_marginTop="10dp"
-                    android:minHeight="48dp"
-                    android:background="@drawable/bg_button_action"
-                    android:textColor="#C9D1D9"
-                    android:textSize="12sp"
-                    android:fontFamily="sans-serif-medium"
-                    android:text="@string/graphics_driver"
-                    android:stateListAnimator="@null" />
+                    <Button
+                        android:id="@+id/install"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:minHeight="46dp"
+                        android:background="@android:color/transparent"
+                        android:gravity="end|center_vertical"
+                        android:text="@string/install_game"
+                        android:textColor="#E8EAED"
+                        android:textSize="15sp"
+                        android:fontFamily="sans-serif-condensed"
+                        android:letterSpacing="0.12"
+                        android:stateListAnimator="@null" />
 
-                <Button
-                    android:id="@+id/settings"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:layout_marginTop="10dp"
-                    android:minHeight="48dp"
-                    android:background="@drawable/bg_button_action"
-                    android:textColor="#C9D1D9"
-                    android:textSize="12sp"
-                    android:fontFamily="sans-serif-medium"
-                    android:text="@string/settings"
-                    android:stateListAnimator="@null" />
+                    <View
+                        android:layout_width="match_parent"
+                        android:layout_height="1dp"
+                        android:layout_marginTop="8dp"
+                        android:layout_marginBottom="8dp"
+                        android:layout_marginStart="40dp"
+                        android:background="#3A3A3E" />
 
-                <Button
-                    android:id="@+id/log"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:layout_marginTop="10dp"
-                    android:minHeight="48dp"
-                    android:background="@drawable/bg_button_action"
-                    android:textColor="#C9D1D9"
-                    android:textSize="12sp"
-                    android:fontFamily="sans-serif-medium"
-                    android:text="@string/view_log"
-                    android:stateListAnimator="@null" />
+                    <Button
+                        android:id="@+id/driver"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:minHeight="46dp"
+                        android:background="@android:color/transparent"
+                        android:gravity="end|center_vertical"
+                        android:text="@string/graphics_driver"
+                        android:textColor="#E8EAED"
+                        android:textSize="15sp"
+                        android:fontFamily="sans-serif-condensed"
+                        android:letterSpacing="0.12"
+                        android:stateListAnimator="@null" />
 
-                <androidx.appcompat.widget.SwitchCompat
-                    android:id="@+id/direct_launch_switch"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:layout_marginTop="14dp"
-                    android:text="Direct launch on app start"
-                    android:textColor="#8B949E"
-                    android:textSize="12sp"
-                    android:fontFamily="sans-serif-medium" />
+                    <Button
+                        android:id="@+id/settings"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:minHeight="46dp"
+                        android:background="@android:color/transparent"
+                        android:gravity="end|center_vertical"
+                        android:text="@string/network_settings"
+                        android:textColor="#E8EAED"
+                        android:textSize="15sp"
+                        android:fontFamily="sans-serif-condensed"
+                        android:letterSpacing="0.12"
+                        android:stateListAnimator="@null" />
+
+                    <Button
+                        android:id="@+id/log"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:minHeight="46dp"
+                        android:background="@android:color/transparent"
+                        android:gravity="end|center_vertical"
+                        android:text="@string/view_log"
+                        android:textColor="#E8EAED"
+                        android:textSize="15sp"
+                        android:fontFamily="sans-serif-condensed"
+                        android:letterSpacing="0.12"
+                        android:stateListAnimator="@null" />
+
+                    <LinearLayout
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:minHeight="46dp"
+                        android:gravity="end|center_vertical"
+                        android:orientation="horizontal">
+
+                        <TextView
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text="MAPS"
+                            android:textColor="#5A5E66"
+                            android:textSize="15sp"
+                            android:fontFamily="sans-serif-condensed"
+                            android:letterSpacing="0.12" />
+
+                        <TextView
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:layout_marginStart="8dp"
+                            android:text="SOON"
+                            android:textColor="#C9A227"
+                            android:textSize="10sp"
+                            android:fontFamily="sans-serif"
+                            android:letterSpacing="0.08" />
+                    </LinearLayout>
+
+                    <View
+                        android:layout_width="match_parent"
+                        android:layout_height="1dp"
+                        android:layout_marginTop="8dp"
+                        android:layout_marginBottom="8dp"
+                        android:layout_marginStart="40dp"
+                        android:background="#3A3A3E" />
+
+                    <Button
+                        android:id="@+id/entry_updates"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:minHeight="46dp"
+                        android:background="@android:color/transparent"
+                        android:gravity="end|center_vertical"
+                        android:text="@string/check_updates"
+                        android:textColor="#E8EAED"
+                        android:textSize="15sp"
+                        android:fontFamily="sans-serif-condensed"
+                        android:letterSpacing="0.12"
+                        android:stateListAnimator="@null" />
+
+                    <Button
+                        android:id="@+id/entry_quit"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:minHeight="46dp"
+                        android:background="@android:color/transparent"
+                        android:gravity="end|center_vertical"
+                        android:text="@string/quit_launcher"
+                        android:textColor="#E8EAED"
+                        android:textSize="15sp"
+                        android:fontFamily="sans-serif-condensed"
+                        android:letterSpacing="0.12"
+                        android:stateListAnimator="@null" />
+
+                    <View
+                        android:layout_width="match_parent"
+                        android:layout_height="1dp"
+                        android:layout_marginTop="8dp"
+                        android:layout_marginBottom="8dp"
+                        android:layout_marginStart="40dp"
+                        android:background="#3A3A3E" />
+
+                    <androidx.appcompat.widget.SwitchCompat
+                        android:id="@+id/direct_launch_switch"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="4dp"
+                        android:gravity="end"
+                        android:text="Direct launch on app start"
+                        android:textColor="#8B949E"
+                        android:textSize="11sp"
+                        android:fontFamily="sans-serif-medium" />
+                </LinearLayout>
+
+                <LinearLayout
+                    android:layout_width="0dp"
+                    android:layout_height="match_parent"
+                    android:layout_weight="1"
+                    android:layout_marginStart="10dp"
+                    android:orientation="vertical"
+                    android:paddingTop="6dp">
+
+                    <TextView
+                        android:id="@+id/detail_title"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:text="@string/detail_default_title"
+                        android:textColor="#F0F6FC"
+                        android:textSize="20sp"
+                        android:fontFamily="sans-serif-condensed"
+                        android:letterSpacing="0.1" />
+
+                    <View
+                        android:layout_width="64dp"
+                        android:layout_height="2dp"
+                        android:layout_marginTop="8dp"
+                        android:background="#C9A227" />
+
+                    <TextView
+                        android:id="@+id/detail_text"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="12dp"
+                        android:text="@string/detail_default_text"
+                        android:textColor="#B9BDC4"
+                        android:textSize="13sp"
+                        android:lineSpacingExtra="3dp"
+                        android:fontFamily="sans-serif" />
+
+                    <TextView
+                        android:id="@+id/status"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="14dp"
+                        android:textColor="#C9D1D9"
+                        android:textSize="12sp"
+                        android:lineSpacingExtra="3dp"
+                        android:fontFamily="sans-serif" />
+                </LinearLayout>
             </LinearLayout>
 
             <LinearLayout
-                android:layout_width="0dp"
-                android:layout_height="match_parent"
-                android:layout_weight="1"
-                android:layout_marginStart="7dp"
-                android:background="@drawable/bg_card"
-                android:orientation="vertical"
-                android:padding="20dp">
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="18dp"
+                android:gravity="bottom"
+                android:orientation="horizontal">
 
                 <TextView
-                    android:id="@+id/detail_title"
-                    android:layout_width="match_parent"
+                    android:id="@+id/footer"
+                    android:layout_width="0dp"
                     android:layout_height="wrap_content"
-                    android:text="@string/detail_default_title"
+                    android:layout_weight="1"
                     android:textColor="#8B949E"
-                    android:textSize="11sp"
-                    android:fontFamily="sans-serif-black"
-                    android:letterSpacing="0.08" />
-
-                <TextView
-                    android:id="@+id/detail_text"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:layout_marginTop="10dp"
-                    android:text="@string/detail_default_text"
-                    android:textColor="#C9D1D9"
-                    android:textSize="13sp"
-                    android:lineSpacingExtra="3dp"
+                    android:textSize="10sp"
+                    android:lineSpacingExtra="2dp"
                     android:fontFamily="sans-serif" />
 
-                <TextView
-                    android:id="@+id/status"
-                    android:layout_width="match_parent"
+                <LinearLayout
+                    android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:layout_marginTop="14dp"
-                    android:textColor="#C9D1D9"
-                    android:textSize="12sp"
-                    android:lineSpacingExtra="3dp"
-                    android:fontFamily="sans-serif" />
+                    android:gravity="end"
+                    android:orientation="vertical">
+
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="@string/wordmark_recompiled"
+                        android:textColor="#8CE99A"
+                        android:textSize="19sp"
+                        android:fontFamily="sans-serif-black"
+                        android:letterSpacing="0.14"
+                        android:shadowColor="#2E7D32"
+                        android:shadowRadius="12"
+                        android:shadowDx="0"
+                        android:shadowDy="0" />
+
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="2dp"
+                        android:text="@string/disclaimer"
+                        android:textColor="#6E7681"
+                        android:textSize="8sp"
+                        android:fontFamily="sans-serif" />
+
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="6dp"
+                        android:text="@string/hint_choose"
+                        android:textColor="#6E7681"
+                        android:textSize="10sp"
+                        android:fontFamily="sans-serif"
+                        android:letterSpacing="0.06" />
+                </LinearLayout>
             </LinearLayout>
         </LinearLayout>
-
-        <!-- Device & Hardware Info Footer -->
-        <TextView
-            android:id="@+id/footer"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="20dp"
-            android:textColor="#484F58"
-            android:textSize="11sp"
-            android:lineSpacingExtra="3dp"
-            android:fontFamily="sans-serif" />
-    </LinearLayout>
-</ScrollView>
+    </ScrollView>
+</FrameLayout>

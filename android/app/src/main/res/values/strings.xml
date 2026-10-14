@@ -3,6 +3,13 @@
     <!-- app_name comes from the product flavour (campaign or multiplayer). -->
     <string name="subtitle">A recompilation, running natively</string>
     <string name="wordmark">MODERN WARFARE 2</string>
+    <string name="wordmark_recompiled">MW2 RECOMPILED</string>
+    <string name="disclaimer">UNOFFICIAL. NOT AFFILIATED WITH ACTIVISION, INFINITY WARD OR MICROSOFT.</string>
+    <string name="hint_choose">TAP TO CHOOSE</string>
+    <string name="network_settings">NETWORK</string>
+    <string name="check_updates">CHECK FOR UPDATES</string>
+    <string name="quit_launcher">QUIT</string>
+    <string name="up_to_date">This is the newest version.</string>
     <string name="detail_default_title">DEPLOYMENT</string>
     <string name="detail_default_text">Pick an entry: its details show here, and choosing it acts at once.</string>
     <string name="launch_other">Launch %1$s</string>

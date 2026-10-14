@@ -191,7 +191,7 @@ namespace
     enum class Action
     {
         None, PlayCampaign, PlayMultiplayer, Install, InstallLocation, ChooseUpdate, Cancel, Quit,
-        Mods,
+        Mods, GetOtherBuild,
         // The profile screen and what it does.
         Profile, Back, NextPlayer, Rename, PlayAs, MaxRank, Prestige, UnlockEverything, UnlockMissions, AllStars,
         CheckUpdate, InstallUpdate,
@@ -344,6 +344,15 @@ namespace
                 break;
             case Action::Mods:
                 AskFolder(Action::Mods);
+                break;
+            case Action::GetOtherBuild:
+                // The other game version lives in its own archives beside
+                // this one's, on the releases page.
+                if (!SDL_OpenURL("https://github.com/CyberLifeYT/mw2-crossplay/releases"))
+                {
+                    message = "Get it from:\nhttps://github.com/CyberLifeYT/mw2-crossplay/releases";
+                    messageIsError = false;
+                }
                 break;
             case Action::ChooseUpdate:
                 Ask(Action::ChooseUpdate, "Title update", "*");
@@ -1000,6 +1009,15 @@ namespace
             add(Action::Mods, "MODS", installed, "MODS",
                 installed ? "Extra maps, weapons and modes from mod packs, for this install's game version.\n\nChoose the extracted folder: its .ff, .pak and .bik files are copied into the game folder. Anything else in it (scripts, plugins, documents) is reported and left alone, with why."
                           : "Install the game first.");
+#ifdef MW2_VERSION_TU0
+            add(Action::GetOtherBuild, "GET TU6 BUILD", true, "TITLE UPDATE 6",
+                "The separate build for title update 6, which mods need. It plays only with TU6 copies, "
+                "never with this disc-version one.\n\nChoose to open the releases page, where its archives wait beside this one's.");
+#else
+            add(Action::GetOtherBuild, "GET TU0 BUILD", true, "DISC VERSION",
+                "The separate build for the disc version, which phones and crossplay use. It plays only with "
+                "disc-version copies, never with this title-update one.\n\nChoose to open the releases page, where its archives wait beside this one's.");
+#endif
 
             // The copy itself. A build nobody released has no version to compare.
             const bool released = *update::Current() != 0;
