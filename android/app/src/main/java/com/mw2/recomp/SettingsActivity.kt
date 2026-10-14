@@ -90,6 +90,9 @@ class SettingsActivity : AppCompatActivity() {
         switch(R.id.touch, prefs.touchControls) { prefs.touchControls = it }
         switch(R.id.gamepad, prefs.gamepadEnabled) { prefs.gamepadEnabled = it }
         switch(R.id.lan_accept, prefs.lanAccept) { prefs.lanAccept = it }
+        val lanIface: EditText = findViewById(R.id.lan_iface)
+        lanIface.setText(prefs.lanIface)
+        lanIface.doAfterTextChanged { prefs.lanIface = it.toString() }
         val playerName: EditText = findViewById(R.id.player_name)
         playerName.setText(prefs.playerName)
         playerName.doAfterTextChanged { prefs.playerName = it.toString() }

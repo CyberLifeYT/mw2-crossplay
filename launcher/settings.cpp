@@ -109,6 +109,19 @@ void settings::SetLanJoin(const std::string& name)
     Save();
 }
 
+std::string settings::LanIface()
+{
+    const auto kept = g_kept.find("MW2_LAN_IFACE");
+    return kept == g_kept.end() ? std::string() : kept->second;
+}
+
+void settings::SetLanIface(const std::string& value)
+{
+    if (value.empty()) g_kept.erase("MW2_LAN_IFACE");
+    else g_kept["MW2_LAN_IFACE"] = value;
+    Save();
+}
+
 bool settings::Sounds()
 {
     const auto kept = g_kept.find("MW2_LAUNCHER_SOUNDS");

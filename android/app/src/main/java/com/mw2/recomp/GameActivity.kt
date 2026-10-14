@@ -743,6 +743,7 @@ class GameActivity : AppCompatActivity(), NativeListener {
         // host's invitation join without asking.
         NativeBridge.nativeSetOption("MW2_NAME", prefs.playerName)
         NativeBridge.nativeSetOption("MW2_LAN_ACCEPT", if (prefs.lanAccept) "1" else "")
+        NativeBridge.nativeSetOption("MW2_LAN_IFACE", prefs.lanIface)
         NativeBridge.nativeLookSettings(
             prefs.lookSensitivityX, prefs.lookSensitivityY,
             prefs.lookSmoothing, prefs.invertLook, prefs.lookSaturation,

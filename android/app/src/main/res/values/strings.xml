@@ -119,6 +119,8 @@
     <string name="player_name_hint">The name other players on the network see (15 characters at most). Empty means the profile\u2019s name, which on a fresh install is \u201cPlayer 1\u201d.</string>
     <string name="lan_accept">Accept network invites automatically</string>
     <string name="lan_accept_hint">When another player on the network invites this phone to their lobby, join without asking. Off means invites are only logged.</string>
+    <string name="lan_iface">Announced adapter (blank = auto)</string>
+    <string name="lan_iface_hint">Which connection sessions invite to: a name or address piece (WiFi, wlan0, 192.168.1). Needed with a VPN and WiFi at once, so guests are told a door they can reach.</string>
     <string name="invite_players">Invite network players</string>
     <string name="join_game">Join network game</string>
     <string name="no_peers">Nobody heard on the network yet — host a lobby on the other machine first, on the same WiFi.</string>

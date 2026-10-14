@@ -196,7 +196,7 @@ namespace
         // The graphics screen, and the next of what each of its entries sets.
         Graphics, Resolution, FpsLimit, Fov,
         // The network screen: who this machine is online and what it joins.
-        Network, LanAccept, NetName, NetJoin,
+        Network, LanAccept, NetName, NetJoin, NetIface,
         // The bug report screen: a run of either game with its log kept.
         Report, ReportCampaign, ReportMultiplayer,
         // The question a start asks when a recorded run was never reported.
@@ -446,9 +446,11 @@ namespace
                 break;
             case Action::NetName:
             case Action::NetJoin:
+            case Action::NetIface:
                 editingNet = true;
-                netField = action == Action::NetJoin ? 1 : 0;
-                newName = netField ? settings::LanJoin() : settings::LanName();
+                netField = action == Action::NetJoin ? 1 : action == Action::NetIface ? 2 : 0;
+                newName = netField == 1 ? settings::LanJoin()
+                        : netField == 2 ? settings::LanIface() : settings::LanName();
                 message.clear();
                 messageIsError = false;
                 SDL_StartTextInput(window);
@@ -473,15 +475,18 @@ namespace
         }
 
         // The keyboard while a name is typed: a profile's, or a network
-        // setting's (netField 0 player name, 1 auto-join player).
+        // setting's (netField 0 player name, 1 auto-join player, 2 adapter).
         void Type(const SDL_Event& event)
         {
             if (editingNet)
             {
+                // Adapter values hold dots and run longer than player names.
+                const size_t limit = netField == 2 ? 64 : 15;
                 if (event.type == SDL_EVENT_TEXT_INPUT)
                 {
                     for (const char* c = event.text.text; *c; c++)
-                        if (newName.size() < 15 && (std::isalnum(static_cast<unsigned char>(*c)) || *c == ' ')) newName += *c;
+                        if (newName.size() < limit && (std::isalnum(static_cast<unsigned char>(*c)) || *c == ' ' ||
+                                                       (netField == 2 && *c == '.'))) newName += *c;
                     return;
                 }
                 if (event.type != SDL_EVENT_KEY_DOWN) return;
@@ -491,12 +496,15 @@ namespace
                 editingNet = false;
                 SDL_StopTextInput(window);
                 if (!keep) return;
-                if (netField) settings::SetLanJoin(newName);
+                if (netField == 1) settings::SetLanJoin(newName);
+                else if (netField == 2) settings::SetLanIface(newName);
                 else settings::SetLanName(newName);
-                message = netField ? (newName.empty() ? "No player is joined automatically."
-                                                      : "Joining " + newName + " when seen.")
-                                   : (newName.empty() ? "Other players see the profile's name."
-                                                      : "Other players see " + newName + ".");
+                message = netField == 1 ? (newName.empty() ? "No player is joined automatically."
+                                                           : "Joining " + newName + " when seen.")
+                        : netField == 2 ? (newName.empty() ? "Announcing the first connection up."
+                                                           : "Announcing addresses matching " + newName + ".")
+                                        : (newName.empty() ? "Other players see the profile's name."
+                                                           : "Other players see " + newName + ".");
                 messageIsError = false;
                 return;
             }
@@ -772,6 +780,15 @@ namespace
                              (join.empty() ? ", turned off." : ": " + join + ".") +
                              "\n\nType the name exactly as their machine shows it. "
                              "The server browser and invitations work either way.");
+            const std::string adapter = settings::LanIface();
+            const bool typingAdapter = editingNet && netField == 2;
+            add(Action::NetIface, std::string("ADAPTER ") + (adapter.empty() ? "AUTO" : adapter), "ADAPTER",
+                typingAdapter ? "Adapter to announce: " + newName + "_\n\nENTER keeps it, ESC leaves it as it was."
+                              : std::string("Announces ") +
+                                (adapter.empty() ? "the first connection up." : "addresses matching " + adapter + ".") +
+                                "\n\nA name or address piece (WiFi, wlan0, 192.168.1): the sessions "
+                                "invite to the announced address, so on a VPN and a LAN at once, "
+                                "name the one the other players are on.");
             const bool accept = settings::LanAccept();
             add(Action::LanAccept, std::string("AUTO-ACCEPT INVITES ") + (accept ? "ON" : "OFF"), "AUTO-ACCEPT INVITES",
                 std::string("When another player on the network invites this machine to their lobby, ") +

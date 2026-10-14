@@ -10,6 +10,8 @@
 // Who the player is, to the title, is the profile at the first controller
 // (signin.h), plus this copy's port slot, so a second copy on one machine is a
 // second player. MW2_NAME is another name for him than the profile's.
+// MW2_LAN_IFACE pins the announced adapter by name or address substring;
+// without it the first connection up is announced.
 //
 // Xbox LIVE lobbies: every copy says who it is and what can be joined, once a
 // second, to everyone on the shared port. MW2_LAN_JOIN=<name> joins that
@@ -238,6 +240,11 @@ namespace
     // up and not the loopback, or the loopback when there is none. The log
     // names them all: with more than one, the first may not be the one the
     // other players are on.
+    //
+    // MW2_LAN_IFACE pins one: any adapter whose name or address contains the
+    // value ("WiFi", "wlan0", "192.168.1"). Matters with several up at once --
+    // a VPN adapter first means sessions invite to an address only VPN peers
+    // reach, and WiFi-only guests then loop on "attempt #N" forever.
     uint32_t OwnAddress()
     {
         const std::vector<Adapter> adapters = Adapters();
@@ -252,6 +259,25 @@ namespace
         }
         if (adapters.empty()) LOGI("online: no network connection is up; lan stays on this machine");
         else LOGI("online: network connections: %s; announcing the first", list.c_str());
+        const char* pinned = env::Text("MW2_LAN_IFACE");
+        if (pinned && *pinned)
+        {
+            for (const Adapter& adapter : adapters)
+            {
+                in_addr address;
+                address.s_addr = htonl(adapter.address);
+                char text[INET_ADDRSTRLEN];
+                inet_ntop(AF_INET, &address, text, sizeof text);
+                if (adapter.name.find(pinned) != std::string::npos ||
+                    std::string(text).find(pinned) != std::string::npos)
+                {
+                    LOGI("online: MW2_LAN_IFACE=%s, announcing %s %s", pinned,
+                         adapter.name.c_str(), text);
+                    return adapter.address;
+                }
+            }
+            LOGW("online: MW2_LAN_IFACE=%s matches no connection, announcing the first", pinned);
+        }
         return adapters.empty() ? uint32_t(INADDR_LOOPBACK) : adapters.front().address;
     }
 

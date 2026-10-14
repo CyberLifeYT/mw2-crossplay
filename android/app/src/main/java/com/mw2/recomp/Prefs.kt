@@ -188,6 +188,14 @@ class Prefs(context: Context) {
         get() = store.getBoolean(KEY_LAN_ACCEPT, false)
         set(value) = store.edit().putBoolean(KEY_LAN_ACCEPT, value).apply()
 
+    /**
+     * Announced network adapter (MW2_LAN_IFACE): name or address piece.
+     * Empty means the first connection up. For VPN + WiFi at once.
+     */
+    var lanIface: String
+        get() = store.getString(KEY_LAN_IFACE, "") ?: ""
+        set(value) = store.edit().putString(KEY_LAN_IFACE, value).apply()
+
     companion object {
         private const val KEY_RESOLUTION = "resolutionScale"
         private const val KEY_RENDER_SCALE = "renderScale"
@@ -216,5 +224,6 @@ class Prefs(context: Context) {
         private const val KEY_PREWARM_ALL = "prewarmAllShaders"
         private const val KEY_PLAYER_NAME = "playerName"
         private const val KEY_LAN_ACCEPT = "lanAccept"
+        private const val KEY_LAN_IFACE = "lanIface"
     }
 }

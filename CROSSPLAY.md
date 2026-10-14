@@ -76,7 +76,7 @@ recompiles and builds on a GitHub runner:
      assets repo only. Sent as an `Authorization` header — never embed tokens
      in the URL (URL parsers choke on them and they leak into request lines).
 3. Android `versionCode` (`android/app/build.gradle.kts`) **must go up with
-   every published release** (currently 8, or set `MW2_VERSION_CODE` in CI) —
+   every published release** (currently 9, or set `MW2_VERSION_CODE` in CI) —
    Android will not install an update over an APK with an equal or higher
    code. Both flavors share the number (they are separate packages).
 
@@ -216,6 +216,27 @@ server list *and* dead invites — one failure, two symptoms. Check in order:
    everyone heard. Fallback with no discovery at all: the host's `game.log`
    prints the exact `connect …` line — the guest types it into the HUD
    console.
+5. **Several networks at once (VPN + WiFi).** Sessions invite to the
+   announced address, and the default is the first connection up — on a VPN
+   that is the VPN address, unreachable from plain WiFi. Set the adapter
+   explicitly: PC launcher NETWORK → ADAPTER (`WiFi`, `wlan0`, `192.168.1`),
+   phone Settings → announced adapter, or `MW2_LAN_IFACE` directly. The
+   `network connections:` log line lists what the machine sees; the guest's
+   `joining a … session, host …` line must name a door on a network both
+   share.
+
+## Mods (fastfiles) and what does not run
+
+- Extra maps, weapons and modes shipped as `.ff` fastfiles (built for TU6)
+  drop straight into the installed `game/` folder beside the others — the
+  engine reads that one flat directory, so a same-version fastfile just
+  loads. Keep the originals aside. TU6 builds only (Android stays TU0).
+- Bot Warfare's **bots do not run here**: their logic is scripts for the
+  CoD Xe **plugin** (`codxe.xex`), and this port has no plugin system — it
+  statically recompiles the game alone, so there is nothing for the plugin
+  or its scripts to load into. What does carry over from those packs are
+  the **fastfiles** (maps/weapons/modes above), which need no plugin.
+  Real bots remain a separate AI project.
 
 ## Troubleshooting
 
