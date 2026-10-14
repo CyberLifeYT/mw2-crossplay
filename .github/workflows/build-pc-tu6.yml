@@ -90,6 +90,10 @@ jobs:
             --require default.xex,default_mp.xex "$ARCHIVE_URL"
           mkdir -p mw2/tu0
           cp mw2/default.xex mw2/default_mp.xex mw2/tu0/
+          # The patch step below only runs when mw2/*.xex are absent: the
+          # fetched disc copies must NOT sit there or the "TU6" build silently
+          # recompiles unpatched disc bytes. Remove them so xexpatch runs.
+          rm -f mw2/default.xex mw2/default_mp.xex mw2/default.pe mw2/default_mp.pe
           # Title update 6, from the private assets repo (see the header).
           curl -sSL -H "Authorization: Bearer $MW2_ASSETS_TOKEN" \
             "https://raw.githubusercontent.com/CyberLifeYT/mw2-assets/main/title-updates/TU6/TU_10LC20N_0000018000000.00000000001GA" \
@@ -119,6 +123,21 @@ jobs:
           set -euo pipefail
           VERSION=tu6 RECOMPILE_ONLY=1 TU=$PWD/tu6.pkg TITLE=sp ISO=mw2/game.iso ./build.sh
           VERSION=tu6 RECOMPILE_ONLY=1 TU=$PWD/tu6.pkg TITLE=mp ISO=mw2/game.iso ./build.sh
+
+      - name: Verify the TU patch applied
+        # Guard: the build must run on patched bytes, never on the disc
+        # copies. Fails fast instead of miscompiling.
+        run: |
+          for x in default default_mp; do
+            disc=$(sha256sum "mw2/tu0/$x.xex" | cut -d' ' -f1)
+            built=$(sha256sum "mw2/$x.xex" | cut -d' ' -f1)
+            echo "$x disc: $disc"
+            echo "$x tu6:  $built"
+            if [ "$disc" = "$built" ]; then
+              echo "::error::$x.xex is byte-identical to the disc: the TU patch did not apply."
+              exit 1
+            fi
+          done
 
       - name: Restore the compiler cache
         uses: actions/cache/restore@v4
@@ -304,6 +323,10 @@ jobs:
             --require default.xex,default_mp.xex "$ARCHIVE_URL"
           mkdir -p mw2/tu0
           cp mw2/default.xex mw2/default_mp.xex mw2/tu0/
+          # The patch step below only runs when mw2/*.xex are absent: the
+          # fetched disc copies must NOT sit there or the "TU6" build silently
+          # recompiles unpatched disc bytes. Remove them so xexpatch runs.
+          rm -f mw2/default.xex mw2/default_mp.xex mw2/default.pe mw2/default_mp.pe
           # Title update 6, from the private assets repo (see the header).
           curl -sSL -H "Authorization: Bearer $MW2_ASSETS_TOKEN" \
             "https://raw.githubusercontent.com/CyberLifeYT/mw2-assets/main/title-updates/TU6/TU_10LC20N_0000018000000.00000000001GA" \
@@ -333,6 +356,21 @@ jobs:
           set -euo pipefail
           VERSION=tu6 RECOMPILE_ONLY=1 TU=$PWD/tu6.pkg TITLE=sp ISO=mw2/game.iso ./build.sh
           VERSION=tu6 RECOMPILE_ONLY=1 TU=$PWD/tu6.pkg TITLE=mp ISO=mw2/game.iso ./build.sh
+
+      - name: Verify the TU patch applied
+        # Guard: the build must run on patched bytes, never on the disc
+        # copies. Fails fast instead of miscompiling.
+        run: |
+          for x in default default_mp; do
+            disc=$(sha256sum "mw2/tu0/$x.xex" | cut -d' ' -f1)
+            built=$(sha256sum "mw2/$x.xex" | cut -d' ' -f1)
+            echo "$x disc: $disc"
+            echo "$x tu6:  $built"
+            if [ "$disc" = "$built" ]; then
+              echo "::error::$x.xex is byte-identical to the disc: the TU patch did not apply."
+              exit 1
+            fi
+          done
 
       - name: Restore the compiler cache
         uses: actions/cache/restore@v4
