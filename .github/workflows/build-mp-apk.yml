@@ -28,6 +28,9 @@ on:
         type: choice
         options: [tu0, tu6]
         default: tu0
+      probe_addrs:
+        description: "Analyser probe addresses, e.g. 0x8242C630 0x82428180 (tu6 only; forces a fresh recompile and prints address-only bounds/flow/tables)"
+        default: ""
 
 permissions:
   contents: read
@@ -146,7 +149,7 @@ jobs:
           path: |
             ppc_mp
             .xex-sha256-tu6
-          key: ppc-mp-tu6-${{ steps.fetch.outputs.assets_key }}-${{ hashFiles('build.sh', 'patches/**', 'config/MW2MP.toml', 'tools/genshared.py', 'tools/gen_kernel_stubs.py') }}
+          key: ppc-mp-tu6-${{ steps.fetch.outputs.assets_key }}-${{ hashFiles('build.sh', 'patches/**', 'config/MW2MP.toml', 'tools/genshared.py', 'tools/gen_kernel_stubs.py') }}${{ inputs.probe_addrs != '' && '-probe' || '' }}
 
       - name: Cache the XenonRecomp build
         uses: actions/cache@v4
@@ -165,6 +168,27 @@ jobs:
         run: |
           set -euo pipefail
           VERSION=tu6 RECOMPILE_ONLY=1 TU=$PWD/tu6.pkg TITLE=mp ISO=mw2/game.iso ./build.sh
+
+      - name: Probe analyser bounds (tu6)
+        # Address-only diagnosis for runtime "no recompiled function" gaps:
+        # where each address lives (.pdata/starts), control flow around it,
+        # nearby jump tables, and fixbounds' own config-entry suggestions.
+        # Prints addresses only, never game bytes; never fails the job.
+        if: steps.tu.outputs.tu == 'tu6' && inputs.probe_addrs != ''
+        run: |
+          echo "===== bracket ${{ inputs.probe_addrs }} ====="
+          MW2_TITLE=mp MW2_VERSION=tu6 python3 tools/bracket.py ${{ inputs.probe_addrs }} || true
+          for a in ${{ inputs.probe_addrs }}; do
+            lo=$(printf '0x%X' $(($a - 0x100)))
+            hi=$(printf '0x%X' $(($a + 0x100)))
+            echo "===== flow $lo..$hi ====="
+            MW2_TITLE=mp MW2_VERSION=tu6 python3 tools/bracket.py --flow $lo $hi || true
+            echo "===== tables near $a ====="
+            python3 tools/tables_near.py config/mw2mp_switch_tables.toml "$a" || true
+          done
+          echo "===== fixbounds suggestions ====="
+          MW2_TITLE=mp MW2_VERSION=tu6 python3 tools/fixbounds.py config/mw2mp_switch_tables.toml logs-recomp-mp-tu6.txt || true
+          true
 
       - name: Verify the TU patch applied (tu6 only)
         if: steps.tu.outputs.tu == 'tu6'
