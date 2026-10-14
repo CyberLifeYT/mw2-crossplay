@@ -98,8 +98,9 @@ Every update ships through CI; skip only components whose code did not change:
 
 ## Title update 6 (TU6) and mods
 
-The disc version (TU0) above is what Android and crossplay use. Mods such as
-Bot Warfare need **TU6** instead:
+TU6 PC builds are green (linux + windows, sp offline + mp lan) and ride on
+the releases next to the TU0 packs. TU6 plays ONLY with TU6 — not with TU0
+PCs or phones (Android stays TU0).
 
 - The TU6 package (`TU_10LC20N_…`, 2 patches + 3 fastfiles) lives in the
   **private** assets repo under `title-updates/TU6/` — same place CI reads
