@@ -2,6 +2,13 @@
 <resources>
     <!-- app_name comes from the product flavour (campaign or multiplayer). -->
     <string name="subtitle">A recompilation, running natively</string>
+    <string name="wordmark">MODERN WARFARE 2</string>
+    <string name="detail_default_title">DEPLOYMENT</string>
+    <string name="detail_default_text">Pick an entry: its details show here, and choosing it acts at once.</string>
+    <string name="launch_other">Launch %1$s</string>
+    <string name="other_name_campaign">MW2 Campaign</string>
+    <string name="other_name_multiplayer">MW2 Multiplayer</string>
+    <string name="other_missing">%1$s is not installed.</string>
 
     <!-- launcher -->
     <string name="play">Play</string>

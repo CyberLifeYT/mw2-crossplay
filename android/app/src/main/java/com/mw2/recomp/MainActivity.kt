@@ -40,6 +40,9 @@ class MainActivity : AppCompatActivity() {
     private lateinit var footer: TextView
     private lateinit var play: Button
     private lateinit var installButton: Button
+    private lateinit var otherAppButton: Button
+    private lateinit var detailTitle: TextView
+    private lateinit var detailText: TextView
     private lateinit var directLaunchSwitch: androidx.appcompat.widget.SwitchCompat
     private var detectedIsoFile: File? = null
     private var nativeReady = false
@@ -65,6 +68,9 @@ class MainActivity : AppCompatActivity() {
         footer = findViewById(R.id.footer)
         play = findViewById(R.id.play)
         installButton = findViewById(R.id.install)
+        otherAppButton = findViewById(R.id.other_app)
+        detailTitle = findViewById(R.id.detail_title)
+        detailText = findViewById(R.id.detail_text)
         directLaunchSwitch = findViewById(R.id.direct_launch_switch)
 
         directLaunchSwitch.isChecked = prefs.autoLaunch
@@ -73,6 +79,7 @@ class MainActivity : AppCompatActivity() {
         }
 
         play.setOnClickListener {
+            showDetail(getString(R.string.play), status.text.toString())
             val gameDirectory = prefs.gameDirectory
             val installed = gameDirectory.isNotEmpty() && safely(false) {
                 NativeBridge.nativeGameInstalled(gameDirectory)
@@ -89,16 +96,31 @@ class MainActivity : AppCompatActivity() {
                 startActivity(Intent(this, InstallActivity::class.java))
             }
         }
+        // The other half of the game, when it is installed: campaign jumps
+        // straight into multiplayer and back, no home screen in between.
+        otherAppButton.setOnClickListener { launchOtherApp() }
         installButton.setOnClickListener {
+            showDetail(
+                getString(R.string.install_game),
+                getString(R.string.install_hint),
+            )
             startActivity(Intent(this, InstallActivity::class.java))
         }
         findViewById<Button>(R.id.driver).setOnClickListener {
+            showDetail(
+                getString(R.string.graphics_driver),
+                getString(R.string.driver_hint),
+            )
             startActivity(Intent(this, DriverActivity::class.java))
         }
         findViewById<Button>(R.id.settings).setOnClickListener {
+            showDetail(getString(R.string.settings), "")
             startActivity(Intent(this, SettingsActivity::class.java))
         }
-        findViewById<Button>(R.id.log).setOnClickListener { showLog() }
+        findViewById<Button>(R.id.log).setOnClickListener {
+            showDetail(getString(R.string.view_log), "")
+            showLog()
+        }
 
         // Whatever killed the app last time, shown before anything else is
         // attempted -- it may well be about to happen again.
@@ -165,6 +187,7 @@ class MainActivity : AppCompatActivity() {
             )
             return
         }
+        refreshOtherApp()
 
         val gameDirectory = prefs.gameDirectory
         val installed = gameDirectory.isNotEmpty() && safely(false) {
@@ -286,6 +309,59 @@ class MainActivity : AppCompatActivity() {
             return
         }
         GameActivity.start(this)
+    }
+
+    private fun showDetail(title: String, text: String) {
+        detailTitle.text = title
+        detailText.text = text
+    }
+
+    /** The other flavor's package, or null when it is not installed. */
+    private fun otherApp(): Pair<String, String>? {
+        val isMp = packageName.endsWith(".mp")
+        val pkg = if (isMp) "com.mw2.recomp.sp" else "com.mw2.recomp.mp"
+        val label = getString(
+            R.string.launch_other,
+            getString(if (isMp) R.string.other_name_campaign else R.string.other_name_multiplayer),
+        )
+        return try {
+            packageManager.getLaunchIntentForPackage(pkg) ?: return null
+            pkg to label
+        } catch (_: Throwable) {
+            null
+        }
+    }
+
+    private fun refreshOtherApp() {
+        val other = otherApp()
+        if (other == null) {
+            otherAppButton.visibility = android.view.View.GONE
+        } else {
+            otherAppButton.visibility = android.view.View.VISIBLE
+            otherAppButton.text = other.second
+        }
+    }
+
+    private fun launchOtherApp() {
+        val other = otherApp()
+        if (other == null) {
+            showDetail(
+                getString(R.string.play),
+                getString(
+                    R.string.other_missing,
+                    getString(
+                        if (packageName.endsWith(".mp")) R.string.other_name_campaign
+                        else R.string.other_name_multiplayer,
+                    ),
+                ),
+            )
+            return
+        }
+        showDetail(other.second, "")
+        try {
+            startActivity(packageManager.getLaunchIntentForPackage(other.first))
+        } catch (_: Throwable) {
+        }
     }
 
     private fun physicalPadCount(): Int {

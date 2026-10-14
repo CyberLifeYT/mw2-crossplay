@@ -76,7 +76,7 @@ recompiles and builds on a GitHub runner:
      assets repo only. Sent as an `Authorization` header — never embed tokens
      in the URL (URL parsers choke on them and they leak into request lines).
 3. Android `versionCode` (`android/app/build.gradle.kts`) **must go up with
-   every published release** (currently 9, or set `MW2_VERSION_CODE` in CI) —
+   every published release** (currently 10, or set `MW2_VERSION_CODE` in CI) —
    Android will not install an update over an APK with an equal or higher
    code. Both flavors share the number (they are separate packages).
 
