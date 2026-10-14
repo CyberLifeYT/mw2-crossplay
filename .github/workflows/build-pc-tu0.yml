@@ -1,6 +1,6 @@
 # Builds the PC player release for this fork: disc TU0 + LAN, the combination
-# Android crossplay needs (the Android build is TU0-only, and a TU6 PC build
-# would not interoperate with it). No Steam backend: system-link over LAN.
+# TU0 crossplay needs (match it with the TU0 phone apps; TU6 PCs and phones
+# play together separately). No Steam backend: system-link over LAN.
 #
 # Needs the same two secrets as Build MP APK (both masked in logs):
 #   GAME_ARCHIVE_URL  PLAIN raw URL of the zip with default.xex + default_mp.xex
