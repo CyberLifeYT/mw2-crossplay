@@ -194,20 +194,7 @@ jobs:
               else tables=config/mw2mp_switch_tables.toml; fi
               for label in $labels; do
                 echo "----- tables near $label -----"
-                python3 - "$tables" "$label" <<'EOF' || true
-import re, sys
-text = open(sys.argv[1]).read()
-label = int(sys.argv[2], 16)
-for blk in text.split('[[switch]]')[1:]:
-    addrs = [int(x, 16) for x in re.findall(r'0x([0-9A-Fa-f]+)', blk)]
-    if not addrs:
-        continue
-    if min(addrs) - 0x400 <= label <= max(addrs) + 0x400:
-        head = blk.strip().splitlines()[:4]
-        print(f'  ... range 0x{min(addrs):08X}..0x{max(addrs):08X}, {len(addrs)} addresses')
-        for ln in head:
-            print('   ', ln[:160])
-EOF
+                python3 tools/tables_near.py "$tables" "$label" || true
               done
             fi
           done
@@ -407,20 +394,7 @@ EOF
               else tables=config/mw2mp_switch_tables.toml; fi
               for label in $labels; do
                 echo "----- tables near $label -----"
-                python3 - "$tables" "$label" <<'EOF' || true
-import re, sys
-text = open(sys.argv[1]).read()
-label = int(sys.argv[2], 16)
-for blk in text.split('[[switch]]')[1:]:
-    addrs = [int(x, 16) for x in re.findall(r'0x([0-9A-Fa-f]+)', blk)]
-    if not addrs:
-        continue
-    if min(addrs) - 0x400 <= label <= max(addrs) + 0x400:
-        head = blk.strip().splitlines()[:4]
-        print(f'  ... range 0x{min(addrs):08X}..0x{max(addrs):08X}, {len(addrs)} addresses')
-        for ln in head:
-            print('   ', ln[:160])
-EOF
+                python3 tools/tables_near.py "$tables" "$label" || true
               done
             fi
           done
