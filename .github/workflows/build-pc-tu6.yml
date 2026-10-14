@@ -174,6 +174,14 @@ jobs:
             echo "===== pdata ($title tu6) ====="
             MW2_TITLE=$title MW2_VERSION=tu6 python3 tools/pdata_dump.py || true
           done
+          # Changed functions disc-vs-TU6, by content hash: addresses and
+          # short hashes only. Pinpoints what the update moved around a
+          # split function (the full dumps above are the raw material).
+          for title in sp mp; do
+            echo "===== changed functions ($title) ====="
+            if [ "$title" = sp ]; then focus=0x8232D874; else focus=0x8241A84C; fi
+            python3 tools/diff_fns.py "$title" "$focus" || true
+          done
           # Undeclared goto labels from the failed C++ compile, located in
           # the executable: the analyser split a function it should not have,
           # and the addresses around the label place its true bounds
@@ -379,6 +387,14 @@ jobs:
           for title in sp mp; do
             echo "===== pdata ($title tu6) ====="
             MW2_TITLE=$title MW2_VERSION=tu6 python3 tools/pdata_dump.py || true
+          done
+          # Changed functions disc-vs-TU6, by content hash: addresses and
+          # short hashes only. Pinpoints what the update moved around a
+          # split function (the full dumps above are the raw material).
+          for title in sp mp; do
+            echo "===== changed functions ($title) ====="
+            if [ "$title" = sp ]; then focus=0x8232D874; else focus=0x8241A84C; fi
+            python3 tools/diff_fns.py "$title" "$focus" || true
           done
           # Undeclared goto labels from the failed C++ compile, located in
           # the executable: the analyser split a function it should not have,
