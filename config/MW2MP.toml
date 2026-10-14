@@ -62,9 +62,4 @@ functions = [
     { address = 0x8230C098, size = 0x1E0 },
     { address = 0x8230F468, size = 0x1B0 },
     { address = 0x823FD978, size = 0x14C },
-    # A bdnz loop in the register-helper gap (no .pdata entry): the analyser
-    # splits its tail (0x8241A850) from its target (0x8241A84C), which then
-    # fails to compile as an undeclared label. Starts at the called address,
-    # runs to the next function.
-    { address = 0x8241A834, size = 0x24 },
 ]
