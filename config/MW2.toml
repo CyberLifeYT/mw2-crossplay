@@ -29,8 +29,8 @@ longjmp_address = 0x823E08C0
 
 functions = [
     # Compact "bdzf ladder" dispatch that XenonAnalyse splits into 5 functions;
-    # 0x8232D874/890/8AC are internal fallthrough labels, not entry points.
-    { address = 0x8232D830, size = 0x9C },
+    # the branch targets inside are fallthrough labels, not entry points.
+    { address = 0x8232D838, size = 0x9C },
 
     # Leaf functions (no stack frame, hence absent from .pdata) that contain
     # jump tables. The analyzer ends them early because a table dispatch looks
@@ -40,11 +40,11 @@ functions = [
     { address = 0x82140530, size = 0x118 },
     { address = 0x82140670, size = 0x114 },
     { address = 0x82140810, size = 0x3B8 },
-    { address = 0x822C8A28, size = 0x88 },
-    { address = 0x822D0BE8, size = 0xE0 },
-    { address = 0x822D2218, size = 0x94 },
-    { address = 0x822DF140, size = 0x20C },
-    { address = 0x822DF350, size = 0x1E0 },
-    { address = 0x822E2770, size = 0x1B0 },
+    { address = 0x822C8A30, size = 0x88 },
+    { address = 0x822D0BF0, size = 0xE0 },
+    { address = 0x822D2220, size = 0x94 },
+    { address = 0x822DF148, size = 0x20C },
+    { address = 0x822DF358, size = 0x1E0 },
+    { address = 0x822E2778, size = 0x1B0 },
     { address = 0x823C82B0, size = 0x14C },
 ]
