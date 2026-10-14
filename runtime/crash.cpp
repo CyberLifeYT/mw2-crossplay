@@ -23,6 +23,9 @@
 #if !defined(__ANDROID__)
 #include <execinfo.h>   // bionic has none; platform::PrintBacktrace unwinds instead
 #endif
+#if defined(__aarch64__)
+#include <sys/ucontext.h>   // faulting host PC + registers in the crash log
+#endif
 #include <fcntl.h>
 #include <unistd.h>
 #include <pthread.h>
@@ -187,6 +190,32 @@ namespace
         }
         std::fflush(stderr);
         DumpBacktrace("fault backtrace");
+#if defined(__aarch64__)
+        // The unwinder often dies on the first host frame (no unwind tables
+        // where it matters), leaving the fault site unknown. The signal
+        // context names it exactly: host PC, thread, and registers. The PC
+        // resolves offline against the build's symbol map / disassembly; a
+        // register holding the fault address shows the data flow.
+        // Async-signal-safe enough: plain reads + fprintf, like the rest here.
+        {
+            ucontext_t* uc = static_cast<ucontext_t*>(uctx);
+            const unsigned long long pc = uc->uc_mcontext.pc;
+            std::fprintf(stderr, "[E] fault host pc %016llX on thread %s\n",
+                         pc, t_name ? t_name : "?");
+            for (int r = 0; r < 30; r += 2)
+                std::fprintf(stderr, "[E]   x%-2d %016llX  x%-2d %016llX\n",
+                             r, (unsigned long long)uc->uc_mcontext.regs[r],
+                             r + 1, (unsigned long long)uc->uc_mcontext.regs[r + 1]);
+            std::fprintf(stderr, "[E]   x30 %016llX  sp %016llX\n",
+                         (unsigned long long)uc->uc_mcontext.regs[30],
+                         (unsigned long long)uc->uc_mcontext.sp);
+            std::fflush(stderr);
+            uint32_t word = 0;
+            std::memcpy(&word, reinterpret_cast<const void*>(pc), 4);
+            std::fprintf(stderr, "[E] fault instruction word %08X\n", word);
+            std::fflush(stderr);
+        }
+#endif
         crash::OnFault();
         _exit(3);
     }
